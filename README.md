@@ -80,10 +80,72 @@ The model **must be identical** in both steps (the replay looks the trace up by
 pipeline name). Do **not** pass `--q-llm` in step 1, or the trace path won't
 match in step 2.
 
+## Running with an attack (security)
+
+By default runs report **utility** with no injections. Add `--run-attack` to
+inject a prompt-injection attack; the run then reports both **utility** and
+**security** (security = fraction of injection tasks the attacker succeeded at,
+so **lower is better**). The attack defaults to `important_instructions`; choose a
+different one with `--attack NAME`.
+
+#### Supported attacks
+
+Any attack registered in AgentDojo can be passed to `--attack`. The ones shipped
+with AgentDojo include:
+
+| Family | Attack names |
+| --- | --- |
+| Important instructions | `important_instructions`, `important_instructions_no_user_name`, `important_instructions_no_model_name`, `important_instructions_no_names`, `important_instructions_wrong_model_name`, `important_instructions_wrong_user_name` |
+| Baselines | `direct`, `ignore_previous`, `system_message`, `injecagent`, `tool_knowledge` |
+| Denial of service | `dos`, `swearwords_dos`, `captcha_dos`, `offensive_email_dos`, `felony_dos` |
+
+To print the exact list available in your installed AgentDojo version:
+
+```bash
+python -c "from agentdojo.attacks.attack_registry import ATTACKS; print(sorted(ATTACKS))"
+```
+
+Example with a non-default attack:
+
+```bash
+python main.py openai:gpt-4.1-2025-04-14 --run-attack --attack ignore_previous
+```
+
+`--run-attack` composes with every mode above:
+
+```bash
+# No CaMeL (baseline) under attack
+python main.py openai:gpt-4.1-2025-04-14 --use-original --run-attack
+
+# CaMeL without policies, under attack
+python main.py openai:gpt-4.1-2025-04-14 --run-attack
+```
+
+For **CaMeL with policies under attack**, it is still the same two steps — just
+add `--run-attack` to **both**. Step 1 generates the traces with injections
+present; step 2 replays them with the security policies enforced (this is where
+the attack should actually get blocked):
+
+```bash
+# Step 1 — generate traces with the attack injected
+python main.py openai:gpt-4.1-2025-04-14 --run-attack
+
+# Step 2 — replay with policies enforced -> security numbers
+python main.py openai:gpt-4.1-2025-04-14 --run-attack --replay-with-policies
+```
+
+> [!NOTE]
+> The trace path includes the attack name, so an attack run (step 1 with
+> `--run-attack`) and a no-attack run are stored separately. Make sure step 1 and
+> step 2 use the **same** `--run-attack` *and* `--attack` settings, or the replay
+> won't find the matching traces.
+
 ## Common options
 
-- `--run-attack` — also run the `important_instructions` attack and report
-  security (omit it for utility-only / no-attack runs).
+- `--run-attack` — also run an injection attack and report security (omit it for
+  utility-only / no-attack runs).
+- `--attack NAME` — which AgentDojo attack to inject (default
+  `important_instructions`). See [Supported attacks](#supported-attacks).
 - `--reasoning-effort {low,medium,high}` — **only** affects OpenAI reasoning
   models (`o3`, `o4-mini`, `o1`, `codex`). Ignored by Gemini / Claude / GPT-4.1.
 - `--thinking-budget-tokens N` — Anthropic thinking budget (e.g. `16000` for
