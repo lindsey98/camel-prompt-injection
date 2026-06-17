@@ -159,6 +159,21 @@ python main.py openai:gpt-4.1-2025-04-14 --run-attack --replay-with-policies
 
 Full list: `python main.py --help`.
 
+### Reproducing the top models
+
+The three best models by no-attack CaMeL utility are **o3 (high)**,
+**o4-mini (high)**, and **Claude Sonnet 4** (no reasoning). To run all three
+through the `+camel+secpol` pipeline (utility *and* security, both as the
+two-step replay), use the helper script:
+
+```bash
+set -a && source .env && set +a
+./scripts/run_top3.sh
+# e.g. a different attack or a single suite:
+ATTACK=ignore_previous SUITES="--suites workspace" ./scripts/run_top3.sh
+```
+
+
 ### Examples
 
 ```bash
