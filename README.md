@@ -11,17 +11,106 @@ Edoardo Debenedetti<sup>1,3</sup>, Ilia Shumailov<sup>2</sup>, Tianqi Fan<sup>1<
 
 ## Pre-requisites
 
-1. Install `uv` via the [official instructions](https://docs.astral.sh/uv/getting-started/installation/).
-2. Rename `.env.example` to `.env` and populate it with your API keys.
-3. `uv` will install all dependencies as soon as you run `uv run ...`.
+1. Install the dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Rename `.env.example` to `.env` and populate it with your API keys
+   (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`).
+3. Load the keys into your environment before running:
+   ```bash
+   set -a && source .env && set +a
+   ```
 
-## Running running the defense against AgentDojo
+The model is always passed as `provider:model_name`, e.g.
+`openai:gpt-4.1-2025-04-14`, `anthropic:claude-sonnet-4-20250514`,
+`google:gemini-2.5-pro-preview-06-05`.
+
+By default a run reports **utility** (no attack). Add `--run-attack` to also
+report **security** under AgentDojo's `important_instructions` attack.
+
+## Running modes
+
+There are three ways to run, summarized here and detailed below:
+
+| Mode | Flags | What it is |
+| --- | --- | --- |
+| **No CaMeL (baseline)** | `--use-original` | Native tool-calling API, no defense |
+| **CaMeL, no policies** | *(none)* | CaMeL interpreter, security policies **off** |
+| **CaMeL + policies** | two steps, see below | CaMeL interpreter with security policies enforced |
+
+### 1. No CaMeL — native tool calling (`--use-original`)
+
+This is the undefended baseline (the "Native Tool Calling API" numbers). It runs
+the model with the normal tool-calling loop, no CaMeL interpreter.
 
 ```bash
-uv run --env-file .env main.py MODEL_NAME [--use-original] [--ad_defense] [--reasoning-effort] [--thinking_budget_tokens] [--run-attack] [--replay-with-policies] [--eval_mode]
+python main.py openai:gpt-4.1-2025-04-14 --use-original
 ```
 
-More details on the various CLI arguments can be found by running `uv run main.py --help`
+### 2. CaMeL without security policies (single step)
+
+Running CaMeL with **no extra flags** uses the CaMeL interpreter but does **not**
+enforce any security policy (it uses a no-op policy engine internally). This is
+the `+camel` configuration.
+
+```bash
+python main.py openai:gpt-4.1-2025-04-14
+```
+
+### 3. CaMeL with security policies (`+camel+secpol`) — two steps
+
+> [!IMPORTANT]
+> Security policies are **only** applied during *replay*. You must first do a
+> normal CaMeL run (step 1) to generate the execution traces, then replay them
+> with `--replay-with-policies` (step 2). The replay reuses the exact same
+> generated code, so the policy is the only thing that changes — and it makes
+> step 2 cheap, since it calls **no** LLM (the model outputs are read back from
+> the saved trace).
+
+```bash
+# Step 1 — generate the CaMeL traces (writes to ./logs/<model>+camel/...)
+python main.py openai:gpt-4.1-2025-04-14
+
+# Step 2 — replay the same code with security policies enforced
+python main.py openai:gpt-4.1-2025-04-14 --replay-with-policies
+```
+
+The model **must be identical** in both steps (the replay looks the trace up by
+pipeline name). Do **not** pass `--q-llm` in step 1, or the trace path won't
+match in step 2.
+
+## Common options
+
+- `--run-attack` — also run the `important_instructions` attack and report
+  security (omit it for utility-only / no-attack runs).
+- `--reasoning-effort {low,medium,high}` — **only** affects OpenAI reasoning
+  models (`o3`, `o4-mini`, `o1`, `codex`). Ignored by Gemini / Claude / GPT-4.1.
+- `--thinking-budget-tokens N` — Anthropic thinking budget (e.g. `16000` for
+  Claude Sonnet 4 with reasoning). This is separate from `--reasoning-effort`.
+- `--suites workspace banking travel slack` — restrict to specific suites.
+- `--user-tasks user_task_0 user_task_1` — restrict to specific user tasks.
+- `--q-llm provider:model` — use a cheaper model as the quarantined LLM (only
+  for single-step CaMeL runs, not for replay).
+- `--eval-mode {normal,strict}` — dependency-propagation mode for policies
+  (`strict` corresponds to `+camel+secpol+strict`).
+
+Full list: `python main.py --help`.
+
+### Examples
+
+```bash
+# Baseline (no CaMeL), with attack -> security numbers
+python main.py anthropic:claude-sonnet-4-20250514 --use-original --run-attack
+
+# OpenAI reasoning model with high reasoning effort, CaMeL + policies
+python main.py openai:o3-2025-04-16 --reasoning-effort high
+python main.py openai:o3-2025-04-16 --reasoning-effort high --replay-with-policies
+
+# Claude Sonnet 4 with a 16k thinking budget, CaMeL + policies, workspace only
+python main.py anthropic:claude-sonnet-4-20250514 --thinking-budget-tokens 16000 --suites workspace
+python main.py anthropic:claude-sonnet-4-20250514 --thinking-budget-tokens 16000 --suites workspace --replay-with-policies
+```
 
 ## FAQ
 
@@ -36,10 +125,10 @@ Please open an issue in this repository. Please note that we are not planning to
 ## Running tests and linters
 
 ```bash
-uv run ruff check --fix
-uv run format
-uv run pyright
-uv run pytest
+ruff check --fix
+ruff format
+pyright
+pytest
 ```
 
 This is not an officially supported Google product. This project is not
