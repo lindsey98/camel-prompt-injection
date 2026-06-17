@@ -10,12 +10,10 @@
 #   set -a && source .env && set +a
 #   ./scripts/run_top3.sh
 #
-# Optional env overrides:
-#   ATTACK=ignore_previous ./scripts/run_top3.sh   # different attack
+# Optional env override:
 #   SUITES="--suites workspace" ./scripts/run_top3.sh
 set -euo pipefail
 
-ATTACK="${ATTACK:-important_instructions}"
 SUITES="${SUITES:-}"   # e.g. "--suites workspace banking"
 
 # model id + per-model flags (top 3 by CaMeL utility)
@@ -41,8 +39,8 @@ for entry in "${MODELS[@]}"; do
   flags="${entry#*|}"
   # utility (no attack)
   run_two_step "$model" "$flags" "" "utility (no attack)"
-  # security (with attack)
-  run_two_step "$model" "$flags" "--run-attack --attack ${ATTACK}" "security (attack=${ATTACK})"
+  # security (with the important_instructions attack)
+  run_two_step "$model" "$flags" "--run-attack" "security (important_instructions)"
 done
 
 echo "All runs complete."
