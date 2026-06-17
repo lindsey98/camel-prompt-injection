@@ -17,7 +17,7 @@ from typing import Any
 
 from typing_extensions import Self
 
-from camel.capabilities import readers, sources
+from src.camel.capabilities import readers, sources
 
 
 @dataclasses.dataclass(frozen=True)

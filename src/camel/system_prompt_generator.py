@@ -27,7 +27,7 @@ import pydantic
 import pydantic.fields
 from agentdojo import functions_runtime
 
-from camel.interpreter import library, value
+from src.camel.interpreter import library, value
 
 _NEWLINE = "\n"
 
@@ -346,25 +346,32 @@ def default_system_prompt_generator(
     classes_to_exclude: set[str] = set(),
 ) -> str:
     """Generates a system prompt with the provided functions."""
+    # 1. 角色定义
+    # 2. 可用的内置类型
+    # 3. 可用的内置函数
+    # 4. 可用的内置方法
+    # 5. 可用的非内置类
+    # 6. 工具函数
+    # 7. Pydantic 类型定义（如果有） → 工具返回值里用到的 BaseModel 定义
     function_definitions = (function_to_python_definition(f) for f in functions)
 
     pydantic_types_definitions = get_pydantic_types_definitions(functions).values()
 
     types_note = (
-        f"""
-### Available types
-
-The types used above which are not built-in are Pydantic BaseModels or Enums defined like this:
-
-```python
-{f"{_NEWLINE * 2}".join(pydantic_types_definitions)}
-```
-
-All these types are available to you for use, without need to re-define or import them.
-
-It is absolutely important that you do not assume that the type used for the fields are built in. For example, do not try to compare datetime objects with strings.
-
-"""
+        f"""    
+        ### Available types
+        
+        The types used above which are not built-in are Pydantic BaseModels or Enums defined like this:
+        
+        ```python
+        {f"{_NEWLINE * 2}".join(pydantic_types_definitions)}
+        ```
+        
+        All these types are available to you for use, without need to re-define or import them.
+        
+        It is absolutely important that you do not assume that the type used for the fields are built in. For example, do not try to compare datetime objects with strings.
+        
+        """
         if pydantic_types_definitions
         else ""
     )

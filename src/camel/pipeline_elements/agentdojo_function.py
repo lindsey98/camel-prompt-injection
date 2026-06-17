@@ -22,10 +22,10 @@ import pydantic
 from agentdojo import functions_runtime
 from agentdojo.default_suites.v1.tools import banking_client, calendar_client, cloud_drive_client, email_client, slack
 
-from camel.capabilities import Capabilities, readers, sources
-from camel.conditional_cache import conditional_lru_cache
-from camel.interpreter import namespace as ns
-from camel.interpreter import value
+from src.camel.capabilities import Capabilities, readers, sources
+from src.camel.conditional_cache import conditional_lru_cache
+from src.camel.interpreter import namespace as ns
+from src.camel.interpreter import value
 
 _USER_EMAIL = "emma.johnson@bluesparrowtech.com"
 
@@ -34,13 +34,31 @@ InnerSourcesSet: TypeAlias = frozenset[str | sources.SourceEnum]
 
 
 def _transform_user_email_to_user(users: Iterable[pydantic.EmailStr]) -> InnerSourcesSet:
-    return frozenset(participant if participant != _USER_EMAIL else sources.SourceEnum.User for participant in users)
+    # sources 的语义是这个数据的内容是谁写的/谁能控制，用来判断是否可信。
+    # SourceEnum.User 这个值只有解释器内部在解析用户 task prompt 时才能赋予，外部工具返回值里永远不会出现，无法伪造。
+    # 用户输入 → SourceEnum.User
+    #     ↓ 赋值给变量
+    # x = "alice@x.com"   sources={User}
+    #     ↓ 传给工具
+    # send_email(recipients=x)  → policy: User in sources → 放行
+    return frozenset(participant
+                     if participant != _USER_EMAIL else
+                     sources.SourceEnum.User for participant in users)
 
 
 def _get_calendar_event_metadata(
     event: calendar_client.CalendarEvent,
     tool: str,
 ) -> Capabilities:
+
+    # readers pythonfrozenset(event.participants)
+    # 日历事件的参与者都能读这个事件，直接用 participants 列表。
+
+    # sources
+    # pythonsources.Tool(tool, _transform_user_email_to_user(event.participants))
+    # sources.Tool 是一个对象，表示"这个数据来自某个工具调用，内容的可信度取决于参与者"。
+    # _transform_user_email_to_user(event.participants) 把参与者列表里用户自己的邮件替换成 SourceEnum.User，其他人保留邮件地址。
+
     # The organizer must be on the list. So if the organizer is untrusted, then the list is not trusted
     return Capabilities(
         frozenset({sources.Tool(tool, _transform_user_email_to_user(event.participants))}),
@@ -122,6 +140,7 @@ def _get_metadata_for_ad(
     result: _T,
     tool: str,
 ) -> _T:
+    # 给工具返回值打 readers/sources 标签, readers 标签从哪来。就是这里硬编码的
     match result.raw:
         case list():
             converted_list = [_get_metadata_for_ad(d, tool) for d in result._python_value]

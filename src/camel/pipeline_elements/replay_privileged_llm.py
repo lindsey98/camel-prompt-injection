@@ -30,20 +30,20 @@ from agentdojo.default_suites.v1.workspace.user_tasks import WorkspaceEnvironmen
 from agentdojo.functions_runtime import EmptyEnv, FunctionCall, FunctionsRuntime
 from agentdojo.task_suite.load_suites import get_suite
 
-from camel import quarantined_llm
-from camel.chat_turn import make_turns
-from camel.interpreter import interpreter, result
-from camel.interpreter.namespace import Namespace
-from camel.pipeline_elements.agentdojo_function import make_agentdojo_namespace
-from camel.pipeline_elements.privileged_llm import (
+from src.camel import quarantined_llm
+from src.camel.chat_turn import make_turns
+from src.camel.interpreter import interpreter, result
+from src.camel.interpreter.namespace import Namespace
+from src.camel.pipeline_elements.agentdojo_function import make_agentdojo_namespace
+from src.camel.pipeline_elements.privileged_llm import (
     _highlight_exception_code,
     extract_print_output,
     make_ad_tool_calls,
 )
-from camel.pipeline_elements.security_policies.agentdojo_security_policies import (
+from src.camel.pipeline_elements.security_policies.agentdojo_security_policies import (
     AgentDojoSecurityPolicyEngine,
 )
-from camel.security_policy import NoSecurityPolicyEngine, SecurityPolicyDeniedError
+from src.camel.security_policy import NoSecurityPolicyEngine, SecurityPolicyDeniedError
 
 FunctionCall.model_rebuild()
 

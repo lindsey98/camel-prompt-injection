@@ -17,7 +17,7 @@ import functools
 
 from typing_extensions import Self
 
-from camel.interpreter import library, value
+from src.camel.interpreter import library, value
 
 
 @dataclasses.dataclass(frozen=True)

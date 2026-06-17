@@ -18,13 +18,13 @@ from agentdojo.default_suites.v1.workspace.task_suite import (
     WorkspaceEnvironment,
 )
 
-from camel import security_policy
-from camel.capabilities import can_readers_read_value, get_all_readers, is_trusted
-from camel.interpreter.value import CaMeLDict, CaMeLList, CaMeLNone, CaMeLStr, CaMeLValue
-from camel.pipeline_elements.security_policies.agentdojo_security_policies import (
+from src.camel import security_policy
+from src.camel.capabilities import can_readers_read_value, get_all_readers, is_trusted
+from src.camel.interpreter.value import CaMeLDict, CaMeLList, CaMeLNone, CaMeLStr, CaMeLValue
+from src.camel.pipeline_elements.security_policies.agentdojo_security_policies import (
     AgentDojoSecurityPolicyEngine,
 )
-from camel.security_policy import Allowed, Denied, SecurityPolicyResult
+from src.camel.security_policy import Allowed, Denied, SecurityPolicyResult
 
 workspace_no_side_effect_tools = {
     # Email tools

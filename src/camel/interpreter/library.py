@@ -25,9 +25,9 @@ from typing import Any, TypeVar
 import pydantic
 import pydantic.fields
 
-from camel.capabilities import Capabilities
-from camel.interpreter import value
-from camel.quarantined_llm import NotEnoughInformationError
+from src.camel.capabilities import Capabilities
+from src.camel.interpreter import value
+from src.camel.quarantined_llm import NotEnoughInformationError
 
 
 # This can't be typed in a more narrow way bc of limitations of the Python type system.

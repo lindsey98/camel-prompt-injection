@@ -10,11 +10,11 @@ from google import genai
 from openai.types.chat import ChatCompletionReasoningEffort
 from pydantic_ai.models import KnownModelName
 
-from camel.interpreter.interpreter import MetadataEvalMode
-from camel.pipeline_elements.anthropic_tool_filter import AnthropicLLMToolFilter
-from camel.pipeline_elements.privileged_llm import PrivilegedLLM
-from camel.pipeline_elements.replay_privileged_llm import PrivilegedLLMReplayer, UserInjectionTasksGetter
-from camel.pipeline_elements.security_policies import (
+from src.camel.interpreter.interpreter import MetadataEvalMode
+from src.camel.pipeline_elements.anthropic_tool_filter import AnthropicLLMToolFilter
+from src.camel.pipeline_elements.privileged_llm import PrivilegedLLM
+from src.camel.pipeline_elements.replay_privileged_llm import PrivilegedLLMReplayer, UserInjectionTasksGetter
+from src.camel.pipeline_elements.security_policies import (
     ADNoSecurityPolicyEngine,
     AgentDojoSecurityPolicyEngine,
     BankingSecurityPolicyEngine,
@@ -138,7 +138,11 @@ def make_tools_pipeline(
             tools_loop = agent_pipeline.ToolsExecutionLoop([agent_pipeline.ToolsExecutor(), llm])
 
         tools_pipeline = agent_pipeline.AgentPipeline(
-            [agent_pipeline.SystemMessage(load_system_message(None)), agent_pipeline.InitQuery(), llm, tools_loop]
+            [
+                agent_pipeline.SystemMessage(load_system_message(None)),
+                agent_pipeline.InitQuery(),
+                llm,
+                tools_loop]
         )
 
         if ad_defense == "tool_filter" and isinstance(llm, agent_pipeline.AnthropicLLM):

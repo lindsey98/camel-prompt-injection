@@ -27,7 +27,7 @@ from agentdojo.types import (
     get_text_content_as_str,
 )
 
-from camel.system_prompt_generator import default_system_prompt_generator
+from src.camel.system_prompt_generator import default_system_prompt_generator
 
 FunctionCall.model_rebuild()
 
@@ -35,7 +35,7 @@ from agentdojo.benchmark import TaskResults
 
 TaskResults.model_rebuild()
 
-from camel.chat_turn import make_turns as make_camel_turns
+from src.camel.chat_turn import make_turns as make_camel_turns
 
 TokensChatMessage: TypeAlias = ChatAssistantMessage | ChatToolResultMessage | ChatUserMessage
 

@@ -19,9 +19,9 @@ from agentdojo import attacks, benchmark, logging
 from agentdojo.task_suite import get_suite
 from openai.types.chat import ChatCompletionReasoningEffort
 
-import camel.custom_yaml  # noqa
-from camel.interpreter.interpreter import MetadataEvalMode
-from camel.models import make_tools_pipeline
+import src.camel.custom_yaml  # noqa
+from src.camel.interpreter.interpreter import MetadataEvalMode
+from src.camel.models import make_tools_pipeline
 
 
 def main(
@@ -31,7 +31,6 @@ def main(
     thinking_budget_tokens: int | None = None,
     ad_defense: str | None = None,
     run_attack: bool = False,
-    attack: str = "important_instructions",
     replay_with_policies: bool = False,
     suites: list[str] | None = None,
     eval_mode: MetadataEvalMode = MetadataEvalMode.NORMAL,
@@ -44,15 +43,14 @@ def main(
     Other newer models might work as well.
 
     Args:
-        model: the model to use. it should be {provider}:model_name. For example, "google:gemini-2.5-pro-preview-06-05".
+        model: the model to use. it should be {provider}:model_name.
+        For example, "google:gemini-2.5-pro-preview-06-05".
         use_original: whether to use the original model with tool calling API instead of CaMeL
         reasoning_effort: for OpenAI reasoning models. How much the model should reason. Can be "low", "medium", "high".
         thinking_budget_tokens: how many tokens Anthropic reasoning models can use. Note that Anthropic reasoning models are not supported yet.
         ad_defense: whether to use a defense from AgentDojo and which one. It must be used in conjunction with `--use-original`.
             Tested defenses are "tool_filter", "repeat_user_prompt", "spotlight_with_delimiting"
-        run_attack: whether to run the attack (enabled with `attack`, defaults to AgentDojo's `important_instructions`)
-        attack: which AgentDojo attack to use when `--run-attack` is set. Any attack registered in AgentDojo is accepted
-            (e.g. "important_instructions", "ignore_previous", "tool_knowledge", "injecagent", "direct", "dos", ...).
+        run_attack: whether to run the attack (it uses AgentDojo's `important_instructions` attack)
         replay_with_policies: replay the run with the given model enforcing security policies. Note that the equivalent run (with same model and attack config)
             should have already been run.
         suites: which suites to run AgentDojo on (can be a list from `["workspace", "banking", "travel", "slack"]`)
@@ -60,7 +58,7 @@ def main(
         q_llm: what model to use as a quarantined llm. If None, the same as `model` is used.
     """
 
-    attack_name = attack
+    attack_name = "important_instructions"
 
     suites = suites or ["workspace", "banking", "travel", "slack"]
     total_utility_results = []
