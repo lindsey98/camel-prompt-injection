@@ -80,6 +80,43 @@ The model **must be identical** in both steps (the replay looks the trace up by
 pipeline name). Do **not** pass `--q-llm` in step 1, or the trace path won't
 match in step 2.
 
+## Running with an attack (security)
+
+By default runs report **utility** with no injections. Add `--run-attack` to
+inject AgentDojo's `important_instructions` prompt-injection attack; the run then
+reports both **utility** and **security** (security = fraction of injection tasks
+the attacker succeeded at, so **lower is better**). The attack is hard-coded to
+`important_instructions` in `main.py` — change it there if you need a different one.
+
+`--run-attack` composes with every mode above:
+
+```bash
+# No CaMeL (baseline) under attack
+python main.py openai:gpt-4.1-2025-04-14 --use-original --run-attack
+
+# CaMeL without policies, under attack
+python main.py openai:gpt-4.1-2025-04-14 --run-attack
+```
+
+For **CaMeL with policies under attack**, it is still the same two steps — just
+add `--run-attack` to **both**. Step 1 generates the traces with injections
+present; step 2 replays them with the security policies enforced (this is where
+the attack should actually get blocked):
+
+```bash
+# Step 1 — generate traces with the attack injected
+python main.py openai:gpt-4.1-2025-04-14 --run-attack
+
+# Step 2 — replay with policies enforced -> security numbers
+python main.py openai:gpt-4.1-2025-04-14 --run-attack --replay-with-policies
+```
+
+> [!NOTE]
+> The trace path includes the attack name, so an attack run (step 1 with
+> `--run-attack`) and a no-attack run are stored separately. Make sure step 1 and
+> step 2 use the **same** `--run-attack` setting, or the replay won't find the
+> matching traces.
+
 ## Common options
 
 - `--run-attack` — also run the `important_instructions` attack and report
