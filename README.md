@@ -85,33 +85,9 @@ match in step 2.
 ## Running with an attack (security)
 
 By default runs report **utility** with no injections. Add `--run-attack` to
-inject a prompt-injection attack; the run then reports both **utility** and
-**security** (security = fraction of injection tasks the attacker succeeded at,
-so **lower is better**). The attack defaults to `important_instructions`; choose a
-different one with `--attack NAME`.
-
-#### Supported attacks
-
-Any attack registered in AgentDojo can be passed to `--attack`. The ones shipped
-with AgentDojo include:
-
-| Family | Attack names |
-| --- | --- |
-| Important instructions | `important_instructions`, `important_instructions_no_user_name`, `important_instructions_no_model_name`, `important_instructions_no_names`, `important_instructions_wrong_model_name`, `important_instructions_wrong_user_name` |
-| Baselines | `direct`, `ignore_previous`, `system_message`, `injecagent`, `tool_knowledge` |
-| Denial of service | `dos`, `swearwords_dos`, `captcha_dos`, `offensive_email_dos`, `felony_dos` |
-
-To print the exact list available in your installed AgentDojo version:
-
-```bash
-python -c "from agentdojo.attacks.attack_registry import ATTACKS; print(sorted(ATTACKS))"
-```
-
-Example with a non-default attack:
-
-```bash
-python main.py openai:o4-mini-2025-04-16 --reasoning-effort high --run-attack --attack ignore_previous
-```
+inject AgentDojo's `important_instructions` prompt-injection attack; the run then
+reports both **utility** and **security** (security = fraction of injection tasks
+the attacker succeeded at, so **lower is better**).
 
 `--run-attack` composes with every mode above:
 
@@ -139,15 +115,13 @@ python main.py openai:o3-2025-04-16 --reasoning-effort high --run-attack --repla
 > [!NOTE]
 > The trace path includes the attack name, so an attack run (step 1 with
 > `--run-attack`) and a no-attack run are stored separately. Make sure step 1 and
-> step 2 use the **same** `--run-attack` *and* `--attack` settings, or the replay
-> won't find the matching traces.
+> step 2 use the **same** `--run-attack` setting, or the replay won't find the
+> matching traces.
 
 ## Common options
 
-- `--run-attack` — also run an injection attack and report security (omit it for
-  utility-only / no-attack runs).
-- `--attack NAME` — which AgentDojo attack to inject (default
-  `important_instructions`). See [Supported attacks](#supported-attacks).
+- `--run-attack` — also run the `important_instructions` attack and report
+  security (omit it for utility-only / no-attack runs).
 - `--reasoning-effort {low,medium,high}` — **only** affects OpenAI reasoning
   models (`o3`, `o4-mini`, `o1`, `codex`). Ignored by Gemini / Claude / GPT-4.1.
 - `--thinking-budget-tokens N` — Anthropic thinking budget (e.g. `16000` for
@@ -171,8 +145,8 @@ two-step replay), use the helper script:
 ```bash
 set -a && source .env && set +a
 ./scripts/run_top3.sh
-# e.g. a different attack or a single suite:
-ATTACK=ignore_previous SUITES="--suites workspace" ./scripts/run_top3.sh
+# e.g. restrict to a single suite:
+SUITES="--suites workspace" ./scripts/run_top3.sh
 ```
 
 
