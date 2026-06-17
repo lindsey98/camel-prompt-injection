@@ -22,9 +22,11 @@ Edoardo Debenedetti<sup>1,3</sup>, Ilia Shumailov<sup>2</sup>, Tianqi Fan<sup>1<
    set -a && source .env && set +a
    ```
 
-The model is always passed as `provider:model_name`, e.g.
-`openai:gpt-4.1-2025-04-14`, `anthropic:claude-sonnet-4-20250514`,
-`google:gemini-2.5-pro-preview-06-05`.
+The model is always passed as `provider:model_name`. The three best models by
+no-attack CaMeL utility — used in the examples below — are:
+`openai:o3-2025-04-16` (with `--reasoning-effort high`),
+`openai:o4-mini-2025-04-16` (with `--reasoning-effort high`), and
+`anthropic:claude-sonnet-4-20250514`.
 
 By default a run reports **utility** (no attack). Add `--run-attack` to also
 report **security** under AgentDojo's `important_instructions` attack.
@@ -45,7 +47,7 @@ This is the undefended baseline (the "Native Tool Calling API" numbers). It runs
 the model with the normal tool-calling loop, no CaMeL interpreter.
 
 ```bash
-python main.py openai:gpt-4.1-2025-04-14 --use-original
+python main.py openai:o3-2025-04-16 --reasoning-effort high --use-original
 ```
 
 ### 2. CaMeL without security policies (single step)
@@ -55,7 +57,7 @@ enforce any security policy (it uses a no-op policy engine internally). This is
 the `+camel` configuration.
 
 ```bash
-python main.py openai:gpt-4.1-2025-04-14
+python main.py anthropic:claude-sonnet-4-20250514
 ```
 
 ### 3. CaMeL with security policies (`+camel+secpol`) — two steps
@@ -70,10 +72,10 @@ python main.py openai:gpt-4.1-2025-04-14
 
 ```bash
 # Step 1 — generate the CaMeL traces (writes to ./logs/<model>+camel/...)
-python main.py openai:gpt-4.1-2025-04-14
+python main.py openai:o3-2025-04-16 --reasoning-effort high
 
 # Step 2 — replay the same code with security policies enforced
-python main.py openai:gpt-4.1-2025-04-14 --replay-with-policies
+python main.py openai:o3-2025-04-16 --reasoning-effort high --replay-with-policies
 ```
 
 The model **must be identical** in both steps (the replay looks the trace up by
@@ -108,17 +110,17 @@ python -c "from agentdojo.attacks.attack_registry import ATTACKS; print(sorted(A
 Example with a non-default attack:
 
 ```bash
-python main.py openai:gpt-4.1-2025-04-14 --run-attack --attack ignore_previous
+python main.py openai:o4-mini-2025-04-16 --reasoning-effort high --run-attack --attack ignore_previous
 ```
 
 `--run-attack` composes with every mode above:
 
 ```bash
 # No CaMeL (baseline) under attack
-python main.py openai:gpt-4.1-2025-04-14 --use-original --run-attack
+python main.py openai:o3-2025-04-16 --reasoning-effort high --use-original --run-attack
 
 # CaMeL without policies, under attack
-python main.py openai:gpt-4.1-2025-04-14 --run-attack
+python main.py anthropic:claude-sonnet-4-20250514 --run-attack
 ```
 
 For **CaMeL with policies under attack**, it is still the same two steps — just
@@ -128,10 +130,10 @@ the attack should actually get blocked):
 
 ```bash
 # Step 1 — generate traces with the attack injected
-python main.py openai:gpt-4.1-2025-04-14 --run-attack
+python main.py openai:o3-2025-04-16 --reasoning-effort high --run-attack
 
 # Step 2 — replay with policies enforced -> security numbers
-python main.py openai:gpt-4.1-2025-04-14 --run-attack --replay-with-policies
+python main.py openai:o3-2025-04-16 --reasoning-effort high --run-attack --replay-with-policies
 ```
 
 > [!NOTE]
@@ -158,6 +160,21 @@ python main.py openai:gpt-4.1-2025-04-14 --run-attack --replay-with-policies
   (`strict` corresponds to `+camel+secpol+strict`).
 
 Full list: `python main.py --help`.
+
+### Reproducing the top models
+
+The three best models by no-attack CaMeL utility are **o3 (high)**,
+**o4-mini (high)**, and **Claude Sonnet 4** (no reasoning). To run all three
+through the `+camel+secpol` pipeline (utility *and* security, both as the
+two-step replay), use the helper script:
+
+```bash
+set -a && source .env && set +a
+./scripts/run_top3.sh
+# e.g. a different attack or a single suite:
+ATTACK=ignore_previous SUITES="--suites workspace" ./scripts/run_top3.sh
+```
+
 
 ### Examples
 
