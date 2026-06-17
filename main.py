@@ -31,6 +31,7 @@ def main(
     thinking_budget_tokens: int | None = None,
     ad_defense: str | None = None,
     run_attack: bool = False,
+    attack: str = "important_instructions",
     replay_with_policies: bool = False,
     suites: list[str] | None = None,
     eval_mode: MetadataEvalMode = MetadataEvalMode.NORMAL,
@@ -49,7 +50,9 @@ def main(
         thinking_budget_tokens: how many tokens Anthropic reasoning models can use. Note that Anthropic reasoning models are not supported yet.
         ad_defense: whether to use a defense from AgentDojo and which one. It must be used in conjunction with `--use-original`.
             Tested defenses are "tool_filter", "repeat_user_prompt", "spotlight_with_delimiting"
-        run_attack: whether to run the attack (it uses AgentDojo's `important_instructions` attack)
+        run_attack: whether to run the attack (enabled with `attack`, defaults to AgentDojo's `important_instructions`)
+        attack: which AgentDojo attack to use when `--run-attack` is set. Any attack registered in AgentDojo is accepted
+            (e.g. "important_instructions", "ignore_previous", "tool_knowledge", "injecagent", "direct", "dos", ...).
         replay_with_policies: replay the run with the given model enforcing security policies. Note that the equivalent run (with same model and attack config)
             should have already been run.
         suites: which suites to run AgentDojo on (can be a list from `["workspace", "banking", "travel", "slack"]`)
@@ -57,7 +60,7 @@ def main(
         q_llm: what model to use as a quarantined llm. If None, the same as `model` is used.
     """
 
-    attack_name = "important_instructions"
+    attack_name = attack
 
     suites = suites or ["workspace", "banking", "travel", "slack"]
     total_utility_results = []
