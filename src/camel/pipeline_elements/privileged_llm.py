@@ -192,7 +192,7 @@ def _highlight_exception_code(
 
 
 def _get_quarantined_llm(model: KnownModelName) -> KnownModelName:
-    if "openai" in model and "o1" in model:
+    if isinstance(model, str) and "openai" in model and "o1" in model:
         return "openai:gpt-4o"
     return model
 

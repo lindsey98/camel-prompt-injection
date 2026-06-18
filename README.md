@@ -165,6 +165,49 @@ python main.py anthropic:claude-sonnet-4-20250514 --thinking-budget-tokens 16000
 python main.py anthropic:claude-sonnet-4-20250514 --thinking-budget-tokens 16000 --suites workspace --replay-with-policies
 ```
 
+## Local / self-hosted models
+
+You can run a local model (e.g. **Llama-3.3-70B**) as long as it is served behind
+an **OpenAI-compatible HTTP endpoint** — both CaMeL LLMs (the privileged code
+generator and the quarantined parser) talk to it over the OpenAI protocol.
+
+1. Serve the model, for example with vLLM:
+   ```bash
+   vllm serve meta-llama/Llama-3.3-70B-Instruct \
+     --served-model-name Llama-3.3-70B-Instruct \
+     --enable-auto-tool-choice --tool-call-parser llama3_json
+   ```
+   (`--enable-auto-tool-choice` matters: the quarantined LLM relies on
+   structured / tool-style output.)
+2. Point CaMeL at the endpoint via environment variables:
+   ```bash
+   export LOCAL_BASE_URL=http://localhost:8000/v1
+   export LOCAL_API_KEY=EMPTY   # whatever your server expects, if anything
+   ```
+3. Use the `local:` prefix with the **served model name**:
+   ```bash
+   # CaMeL without policies
+   python main.py local:Llama-3.3-70B-Instruct
+
+   # CaMeL + policies (two steps, as usual)
+   python main.py local:Llama-3.3-70B-Instruct
+   python main.py local:Llama-3.3-70B-Instruct --replay-with-policies
+
+   # baseline (no CaMeL)
+   python main.py local:Llama-3.3-70B-Instruct --use-original
+   ```
+
+Notes:
+- The served model name must be registered in `_supported_model_names`
+  (`src/camel/models.py`) so the attack/logging machinery can resolve it.
+  `Llama-3.3-70B-Instruct` is already added; add other names there as needed.
+- CaMeL leans heavily on the quarantined LLM producing **valid structured
+  output** and the privileged LLM producing **valid Python**. Smaller/open models
+  do this less reliably than frontier models, so expect more interpreter retries
+  and `NotEnoughInformationError`s.
+- To keep a strong privileged model but a cheap/local parser, pass
+  `--q-llm local:Llama-3.3-70B-Instruct` (and remember to repeat it in step 2).
+
 ## FAQ
 
 > How do I try a new/different model?
