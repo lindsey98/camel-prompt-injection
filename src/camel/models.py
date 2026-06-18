@@ -118,7 +118,14 @@ def _force_single_tool_calls(client: openai.OpenAI) -> None:
             kwargs.setdefault("parallel_tool_calls", False)
         return original_create(*args, **kwargs)
 
-    client.chat.completions.create = create  # type: ignore[method-assign]
+    try:
+        client.chat.completions.create = create  # type: ignore[method-assign]
+    except (AttributeError, TypeError) as e:  # pragma: no cover - SDK internals may change
+        warnings.warn(
+            "Could not force parallel_tool_calls=False on the local client "
+            f"({e}); native (--use-original) tool calling may fail on single-tool-call "
+            "parsers like vLLM's llama3_json."
+        )
 
 
 def _make_context_safe(llm: agent_pipeline.BasePipelineElement) -> agent_pipeline.BasePipelineElement:
