@@ -207,6 +207,12 @@ Notes:
   and `NotEnoughInformationError`s.
 - To keep a strong privileged model but a cheap/local parser, pass
   `--q-llm local:Llama-3.3-70B-Instruct` (and remember to repeat it in step 2).
+- **Context window:** the prompt (system prompt + tool schemas + accumulated tool
+  outputs) must fit the model's context window. `workspace`/`travel` are the
+  largest; `banking`/`slack` are much smaller. Serve with a large `--max-model-len`
+  (Llama-3.3-70B supports up to 128k). If a prompt still overflows, that task is
+  **skipped with a warning and scored as failed** rather than crashing the run, so
+  the rest of the benchmark continues.
 
 ## FAQ
 
