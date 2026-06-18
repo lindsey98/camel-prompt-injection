@@ -25,11 +25,22 @@ Edoardo Debenedetti<sup>1,3</sup>, Ilia Shumailov<sup>2</sup>, Tianqi Fan<sup>1<
 The model is always passed as `provider:model_name`. The three best models by
 no-attack CaMeL utility — used in the examples below — are:
 `openai:o3-2025-04-16` (with `--reasoning-effort high`),
-`openai:o4-mini-2025-04-16` (with `--reasoning-effort high`), and
-`anthropic:claude-sonnet-4-20241022`.
+`openai:o4-mini-2025-04-16` (with `--reasoning-effort high`), 
+`anthropic:claude-sonnet-4-5-20250929`, and 
+`google:gemini-flash-latest`.
 
 By default a run reports **utility** (no attack). Add `--run-attack` to also
 report **security** under AgentDojo's `important_instructions` attack.
+
+You can check the available models by running:
+- For Gemini:
+```bash
+ python -c "import google.genai as genai; c = genai.Client(); [print(m.name) for m in c.models.list()]"
+```
+- For Claude:
+```bash
+python -c "import anthropic; c = anthropic.Anthropic(); print([m.id for m in c.models.list()])"
+```
 
 ## Running modes
 

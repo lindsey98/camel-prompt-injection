@@ -36,9 +36,10 @@ _oai_thinking_models_with_effort = {
 }
 _supported_model_names = {
     "gemini-2.5-flash-preview-05-20": "AI model developed by Google",
+    "gemini-2.5-flash": "AI model developed by Google",
     "gemini-2.5-pro-preview-06-05": "AI model developed by Google",
     "gemini-2.0-flash-lite-001": "AI model developed by Google",
-    "claude-3-5-haiku-20241022": "Claude",
+     "claude-3-5-haiku-20241022": "Claude",
     "claude-3-5-sonnet-20241022": "Claude",
     "claude-3-7-sonnet-20250219": "Claude",
     "claude-sonnet-4-20250514": "Claude",
