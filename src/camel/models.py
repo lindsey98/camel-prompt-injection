@@ -103,6 +103,24 @@ def _is_context_length_error(exc: Exception) -> bool:
     return any(marker in message for marker in _CONTEXT_ERROR_MARKERS)
 
 
+def _force_single_tool_calls(client: openai.OpenAI) -> None:
+    """Force ``parallel_tool_calls=False`` on a client's chat completions.
+
+    Some local servers (e.g. vLLM with the ``llama3_json`` tool-call parser) only
+    support a single tool call per turn and return a 400 otherwise. This only affects
+    requests that actually pass ``tools`` (i.e. the native ``--use-original`` baseline);
+    CaMeL's privileged LLM sends no tools, so it is unaffected.
+    """
+    original_create = client.chat.completions.create
+
+    def create(*args, **kwargs):
+        if kwargs.get("tools"):
+            kwargs.setdefault("parallel_tool_calls", False)
+        return original_create(*args, **kwargs)
+
+    client.chat.completions.create = create  # type: ignore[method-assign]
+
+
 def _make_context_safe(llm: agent_pipeline.BasePipelineElement) -> agent_pipeline.BasePipelineElement:
     """Wraps an LLM element so a context-length overflow fails the task instead of crashing.
 
@@ -177,6 +195,10 @@ def make_tools_pipeline(
         # LOCAL_BASE_URL and (optional) LOCAL_API_KEY environment variables.
         base_url = os.getenv("LOCAL_BASE_URL", "http://localhost:8000/v1")
         client = openai.OpenAI(api_key=os.getenv("LOCAL_API_KEY", "EMPTY"), base_url=base_url)
+        # Many local tool-call parsers (e.g. vLLM's llama3_json) only support a single
+        # tool call per turn, which the native (--use-original) loop would otherwise
+        # violate. Force parallel_tool_calls=False for this client.
+        _force_single_tool_calls(client)
         llm = agent_pipeline.OpenAILLM(client, model.split(":", 1)[1], None)
     else:
         raise ValueError("Invalid model")

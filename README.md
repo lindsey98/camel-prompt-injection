@@ -207,6 +207,10 @@ Notes:
   and `NotEnoughInformationError`s.
 - To keep a strong privileged model but a cheap/local parser, pass
   `--q-llm local:Llama-3.3-70B-Instruct` (and remember to repeat it in step 2).
+- **Native baseline (`--use-original`) + tool parsers:** some local tool-call
+  parsers (e.g. vLLM's `llama3_json`) only allow one tool call per turn. CaMeL
+  itself is unaffected (it generates Python, not tool calls), and for the native
+  baseline the local client forces `parallel_tool_calls=False` automatically.
 - **Context window:** the prompt (system prompt + tool schemas + accumulated tool
   outputs) must fit the model's context window. `workspace`/`travel` are the
   largest; `banking`/`slack` are much smaller. Serve with a large `--max-model-len`
