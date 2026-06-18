@@ -43,6 +43,7 @@ _supported_model_names = {
     "claude-3-7-sonnet-20250219": "Claude",
     "claude-sonnet-4-20250514": "Claude",
     "claude-opus-4-20250514": "Claude",
+    "claude-sonnet-4-5-20250929": "Claude",
     "gpt-4o-2024-08-06": "GPT-4",
     "gpt-4o-mini-2024-07-18": "GPT-4",
     "gpt-4.1-2025-04-14": "ChatGPT",
@@ -138,11 +139,7 @@ def make_tools_pipeline(
             tools_loop = agent_pipeline.ToolsExecutionLoop([agent_pipeline.ToolsExecutor(), llm])
 
         tools_pipeline = agent_pipeline.AgentPipeline(
-            [
-                agent_pipeline.SystemMessage(load_system_message(None)),
-                agent_pipeline.InitQuery(),
-                llm,
-                tools_loop]
+            [agent_pipeline.SystemMessage(load_system_message(None)), agent_pipeline.InitQuery(), llm, tools_loop]
         )
 
         if ad_defense == "tool_filter" and isinstance(llm, agent_pipeline.AnthropicLLM):

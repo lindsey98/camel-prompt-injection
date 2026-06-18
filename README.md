@@ -26,7 +26,7 @@ The model is always passed as `provider:model_name`. The three best models by
 no-attack CaMeL utility — used in the examples below — are:
 `openai:o3-2025-04-16` (with `--reasoning-effort high`),
 `openai:o4-mini-2025-04-16` (with `--reasoning-effort high`), and
-`anthropic:claude-sonnet-4-20250514`.
+`anthropic:claude-sonnet-4-20241022`.
 
 By default a run reports **utility** (no attack). Add `--run-attack` to also
 report **security** under AgentDojo's `important_instructions` attack.
@@ -43,11 +43,14 @@ There are three ways to run, summarized here and detailed below:
 
 ### 1. No CaMeL — native tool calling (`--use-original`)
 
-This is the undefended baseline (the "Native Tool Calling API" numbers). It runs
-the model with the normal tool-calling loop, no CaMeL interpreter.
-
+No attack:
 ```bash
-python main.py openai:o3-2025-04-16 --reasoning-effort high --use-original
+python main.py anthropic:claude-sonnet-4-5-20250929 --use-original
+```
+
+Under attack:
+```bash
+python main.py anthropic:claude-sonnet-4-5-20250929 --use-original --run-attack
 ```
 
 ### 2. CaMeL without security policies (single step)
@@ -57,8 +60,10 @@ enforce any security policy (it uses a no-op policy engine internally). This is
 the `+camel` configuration.
 
 ```bash
-python main.py anthropic:claude-sonnet-4-20250514
+python main.py anthropic:claude-sonnet-4-5-20250929 
 ```
+
+Add ``--run-attack`` if you want to run under attack.
 
 ### 3. CaMeL with security policies (`+camel+secpol`) — two steps
 
@@ -72,45 +77,16 @@ python main.py anthropic:claude-sonnet-4-20250514
 
 ```bash
 # Step 1 — generate the CaMeL traces (writes to ./logs/<model>+camel/...)
-python main.py openai:o3-2025-04-16 --reasoning-effort high
+python main.py anthropic:claude-sonnet-4-5-20250929 
 
 # Step 2 — replay the same code with security policies enforced
-python main.py openai:o3-2025-04-16 --reasoning-effort high --replay-with-policies
+python main.py anthropic:claude-sonnet-4-5-20250929 --replay-with-policies
 ```
+Add ``--run-attack`` if you want to run under attack.
 
 The model **must be identical** in both steps (the replay looks the trace up by
 pipeline name). Do **not** pass `--q-llm` in step 1, or the trace path won't
 match in step 2.
-
-## Running with an attack (security)
-
-By default runs report **utility** with no injections. Add `--run-attack` to
-inject AgentDojo's `important_instructions` prompt-injection attack; the run then
-reports both **utility** and **security** (security = fraction of injection tasks
-the attacker succeeded at, so **lower is better**).
-
-`--run-attack` composes with every mode above:
-
-```bash
-# No CaMeL (baseline) under attack
-python main.py openai:o3-2025-04-16 --reasoning-effort high --use-original --run-attack
-
-# CaMeL without policies, under attack
-python main.py anthropic:claude-sonnet-4-20250514 --run-attack
-```
-
-For **CaMeL with policies under attack**, it is still the same two steps — just
-add `--run-attack` to **both**. Step 1 generates the traces with injections
-present; step 2 replays them with the security policies enforced (this is where
-the attack should actually get blocked):
-
-```bash
-# Step 1 — generate traces with the attack injected
-python main.py openai:o3-2025-04-16 --reasoning-effort high --run-attack
-
-# Step 2 — replay with policies enforced -> security numbers
-python main.py openai:o3-2025-04-16 --reasoning-effort high --run-attack --replay-with-policies
-```
 
 > [!NOTE]
 > The trace path includes the attack name, so an attack run (step 1 with
@@ -135,34 +111,19 @@ python main.py openai:o3-2025-04-16 --reasoning-effort high --run-attack --repla
 
 Full list: `python main.py --help`.
 
-### Reproducing the top models
-
-The three best models by no-attack CaMeL utility are **o3 (high)**,
-**o4-mini (high)**, and **Claude Sonnet 4** (no reasoning). To run all three
-through the `+camel+secpol` pipeline (utility *and* security, both as the
-two-step replay), use the helper script:
-
-```bash
-set -a && source .env && set +a
-./scripts/run_top3.sh
-# e.g. restrict to a single suite:
-SUITES="--suites workspace" ./scripts/run_top3.sh
-```
-
-
 ### Examples
 
 ```bash
 # Baseline (no CaMeL), with attack -> security numbers
-python main.py anthropic:claude-sonnet-4-20250514 --use-original --run-attack
+python main.py anthropic:claude-sonnet-4-5-20250929 --use-original --run-attack
 
 # OpenAI reasoning model with high reasoning effort, CaMeL + policies
 python main.py openai:o3-2025-04-16 --reasoning-effort high
 python main.py openai:o3-2025-04-16 --reasoning-effort high --replay-with-policies
 
 # Claude Sonnet 4 with a 16k thinking budget, CaMeL + policies, workspace only
-python main.py anthropic:claude-sonnet-4-20250514 --thinking-budget-tokens 16000 --suites workspace
-python main.py anthropic:claude-sonnet-4-20250514 --thinking-budget-tokens 16000 --suites workspace --replay-with-policies
+python main.py anthropic:claude-sonnet-4-5-20250929 --thinking-budget-tokens 16000 --suites workspace
+python main.py anthropic:claude-sonnet-4-5-20250929 --thinking-budget-tokens 16000 --suites workspace --replay-with-policies
 ```
 
 ## FAQ
@@ -171,19 +132,3 @@ python main.py anthropic:claude-sonnet-4-20250514 --thinking-budget-tokens 16000
 
 You can add it to the [`models.py`](src/camel/models.py) file, in the `_supported_model_names` variable. The keys are the model names with the given provider (check the provider's API) and the values is what the model says when asked "what model are you?". Keep in mind that OpenAI reasoning models are stored in the `_oai_thinking_models` variable instead.
 
-> If I have questions on the codebase how can I reach out?
-
-Please open an issue in this repository. Please note that we are not planning to fix bugs as this codebase is just meant as a research artifact.
-
-## Running tests and linters
-
-```bash
-ruff check --fix
-ruff format
-pyright
-pytest
-```
-
-This is not an officially supported Google product. This project is not
-eligible for the [Google Open Source Software Vulnerability Rewards
-Program](https://bughunters.google.com/open-source-security).
