@@ -49,6 +49,7 @@ _supported_model_names = {
     "gpt-4o-mini-2024-07-18": "GPT-4",
     "gpt-4.1-2025-04-14": "ChatGPT",
     "gpt-4.1-nano-2025-04-14": "ChatGPT",
+    "Llama-3.3-70B-Instruct": "Llama",
 } | _oai_thinking_models_with_effort
 suffixes = ["", "+camel", "+camel+secpol", "+camel+secpol+strict"]
 
@@ -125,10 +126,34 @@ def make_tools_pipeline(
         llm = agent_pipeline.AnthropicLLM(
             client, model.split(":")[1], thinking_budget_tokens=thinking_budget_tokens, max_tokens=max_tokens
         )
+    elif model.startswith("local:"):
+        # Local / self-hosted model exposed via an OpenAI-compatible server
+        # (vLLM, Ollama, TGI, SGLang, ...). Configure the endpoint with the
+        # LOCAL_BASE_URL and (optional) LOCAL_API_KEY environment variables.
+        base_url = os.getenv("LOCAL_BASE_URL", "http://localhost:8000/v1")
+        client = openai.OpenAI(api_key=os.getenv("LOCAL_API_KEY", "EMPTY"), base_url=base_url)
+        llm = agent_pipeline.OpenAILLM(client, model.split(":", 1)[1], None)
     else:
         raise ValueError("Invalid model")
 
-    llm.name = model.split(":")[1]
+    llm.name = model.split(":", 1)[1]
+
+    # The quarantined LLM is invoked through pydantic-ai. For local models we
+    # build an explicit OpenAI-compatible model object pointing at the same
+    # endpoint; for the hosted providers we keep passing the model string.
+    if model.startswith("local:"):
+        from pydantic_ai.models.openai import OpenAIModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        quarantined_llm_model = OpenAIModel(
+            model.split(":", 1)[1],
+            provider=OpenAIProvider(
+                base_url=os.getenv("LOCAL_BASE_URL", "http://localhost:8000/v1"),
+                api_key=os.getenv("LOCAL_API_KEY", "EMPTY"),
+            ),
+        )
+    else:
+        quarantined_llm_model = model
 
     engine = _SECURITY_POLICY_ENGINES[suite]
 
@@ -199,7 +224,7 @@ def make_tools_pipeline(
                 PrivilegedLLM(
                     llm,
                     ADNoSecurityPolicyEngine,
-                    q_llm or model,
+                    q_llm or quarantined_llm_model,
                 ),
             ]
         )
