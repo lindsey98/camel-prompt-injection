@@ -1,9 +1,11 @@
 import os
 import time
+import warnings
 
 import anthropic
 import openai
 from agentdojo import agent_pipeline, functions_runtime
+from agentdojo import types as ad_types
 from agentdojo.agent_pipeline.agent_pipeline import load_system_message
 from agentdojo.models import MODEL_NAMES
 from google import genai
@@ -88,6 +90,51 @@ class Sleep(agent_pipeline.BasePipelineElement):
         return query, runtime, env, messages, extra_args
 
 
+_CONTEXT_ERROR_MARKERS = (
+    "context length",
+    "context_length",
+    "maximum context",
+    "reduce the length",
+    "too many tokens",
+)
+
+
+def _is_context_length_error(exc: Exception) -> bool:
+    """Best-effort detection of a 'prompt longer than the context window' error."""
+    message = str(exc).lower()
+    return any(marker in message for marker in _CONTEXT_ERROR_MARKERS)
+
+
+def _make_context_safe(llm: agent_pipeline.BasePipelineElement) -> agent_pipeline.BasePipelineElement:
+    """Wraps an LLM element so a context-length overflow fails the task instead of crashing.
+
+    When the prompt exceeds the model's context window (common with local models that
+    have a small window), the underlying client raises a 400 BadRequestError that would
+    otherwise abort the whole benchmark. Here we catch it, emit a warning, and return an
+    empty assistant turn so the pipeline ends gracefully and the task is scored as failed.
+    """
+    original_query = llm.query
+
+    def safe_query(
+        query,
+        runtime,
+        env=functions_runtime.EmptyEnv(),
+        messages=[],
+        extra_args={},
+    ):
+        try:
+            return original_query(query, runtime, env, messages, extra_args)
+        except openai.BadRequestError as e:
+            if not _is_context_length_error(e):
+                raise
+            warnings.warn(f"Skipping turn: prompt exceeded the model's context window ({e}).")
+            empty_message = ad_types.ChatAssistantMessage(role="assistant", content=None, tool_calls=None)
+            return query, runtime, env, [*messages, empty_message], extra_args
+
+    llm.query = safe_query  # type: ignore[method-assign]
+    return llm
+
+
 def make_tools_pipeline(
     model: KnownModelName,
     use_original: bool,
@@ -137,6 +184,8 @@ def make_tools_pipeline(
         raise ValueError("Invalid model")
 
     llm.name = model.split(":", 1)[1]
+    # Make context-window overflows fail the task gracefully instead of crashing the run.
+    llm = _make_context_safe(llm)
 
     # The quarantined LLM is invoked through pydantic-ai. For local models we
     # build an explicit OpenAI-compatible model object pointing at the same
