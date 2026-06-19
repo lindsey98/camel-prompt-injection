@@ -54,11 +54,6 @@ def query_quarantined_llm(
     need to provide the assistant with more information such as email addresses, dates, identifiers, names, etc. **DO NOT HESITATE TO PASS THE ENTIRE
     OBJECTS RETURN FROM THE TOOL FUNCTIONS IF THE MODEL DOES NOT HAVE ENOUGH INFORMATION**.
 
-    **When you need to extract structured data from MANY items (e.g., a list of emails/messages), do NOT call this function
-    once per item inside a loop: if a single item lacks the needed information the whole call raises `NotEnoughInformationError`
-    and aborts everything. Instead make ONE call over all the items at once with a `list[...]` output schema (e.g. `list[Hobby]`).
-    The assistant will return only the items it can extract and skip the ones it cannot.**
-
     :param query: a string with the query. Make sure to provide sufficient instructions to the AI assistant so that it can understand what it needs to do.
     Avoid just passing it tool outputs without additional instructions. Provide as much details as possible. Keep in mind that the assitant does not have
     direct access to the variables, so you need to insert **all the relevant information in the prompt**. When in doubt, do not hesitate to just provide full tool outputs, as long
