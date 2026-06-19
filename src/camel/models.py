@@ -171,20 +171,39 @@ def _disable_google_safety(client) -> None:
     try:
         from google.genai import types
 
-        off_settings = [
-            types.SafetySetting(category=category, threshold="OFF")
-            for category in (
-                "HARM_CATEGORY_HARASSMENT",
-                "HARM_CATEGORY_HATE_SPEECH",
-                "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "HARM_CATEGORY_DANGEROUS_CONTENT",
-            )
-        ]
+        categories = (
+            "HARM_CATEGORY_HARASSMENT",
+            "HARM_CATEGORY_HATE_SPEECH",
+            "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            "HARM_CATEGORY_DANGEROUS_CONTENT",
+        )
+        off_settings = None
+        for threshold in ("OFF", "BLOCK_NONE"):
+            try:
+                off_settings = [types.SafetySetting(category=c, threshold=threshold) for c in categories]
+                break
+            except Exception:
+                continue
+        if off_settings is None:
+            warnings.warn("Could not build Google safety settings (no accepted threshold); leaving defaults.")
+            return
     except Exception as e:  # pragma: no cover - depends on google-genai internals
         warnings.warn(f"Could not build Google safety settings ({e}); leaving defaults.")
         return
 
     original_generate = client.models.generate_content
+
+    def _log_if_empty(response) -> None:
+        try:
+            candidate = response.candidates[0]
+            content = getattr(candidate, "content", None)
+            if content is None or not getattr(content, "parts", None):
+                warnings.warn(
+                    f"[Gemini] empty content: finish_reason={getattr(candidate, 'finish_reason', None)} "
+                    f"safety_ratings={getattr(candidate, 'safety_ratings', None)}"
+                )
+        except Exception:
+            pass
 
     def generate_content(*args, **kwargs):
         config = kwargs.get("config")
@@ -193,7 +212,9 @@ def _disable_google_safety(client) -> None:
                 config.safety_settings = off_settings
             except Exception:
                 pass
-        return original_generate(*args, **kwargs)
+        response = original_generate(*args, **kwargs)
+        _log_if_empty(response)
+        return response
 
     try:
         client.models.generate_content = generate_content  # type: ignore[method-assign]
