@@ -104,7 +104,9 @@ def query_quarantined_llm(
         print(f"[Q-LLM] schema: {getattr(output_schema, '__name__', output_schema)}")
         print(f"[Q-LLM] query:\n{query}")
     try:
-        res = model.run_sync(query).data
+        run_result = model.run_sync(query)
+        # pydantic-ai renamed `AgentRunResult.data` to `.output` in newer versions.
+        res = run_result.output if hasattr(run_result, "output") else run_result.data
     except Exception as e:
         if debug:
             print(f"[Q-LLM] FAILED: {type(e).__name__}: {e}")
