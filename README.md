@@ -70,11 +70,15 @@ Running CaMeL with **no extra flags** uses the CaMeL interpreter but does **not*
 enforce any security policy (it uses a no-op policy engine internally). This is
 the `+camel` configuration.
 
+No attack:
 ```bash
 python main.py anthropic:claude-sonnet-4-5-20250929 
 ```
 
-Add ``--run-attack`` if you want to run under attack.
+Under attack:
+```bash
+python main.py anthropic:claude-sonnet-4-5-20250929 --run-attack
+```
 
 ### 3. CaMeL with security policies (`+camel+secpol`) — two steps
 
@@ -86,6 +90,7 @@ Add ``--run-attack`` if you want to run under attack.
 > step 2 cheap, since it calls **no** LLM (the model outputs are read back from
 > the saved trace).
 
+No attack:
 ```bash
 # Step 1 — generate the CaMeL traces (writes to ./logs/<model>+camel/...)
 python main.py anthropic:claude-sonnet-4-5-20250929 
@@ -93,7 +98,15 @@ python main.py anthropic:claude-sonnet-4-5-20250929
 # Step 2 — replay the same code with security policies enforced
 python main.py anthropic:claude-sonnet-4-5-20250929 --replay-with-policies
 ```
-Add ``--run-attack`` if you want to run under attack.
+
+Under attack:
+```bash
+# Step 1 — generate the CaMeL traces (writes to ./logs/<model>+camel/...)
+python main.py anthropic:claude-sonnet-4-5-20250929 --run-attack
+
+# Step 2 — replay the same code with security policies enforced
+python main.py anthropic:claude-sonnet-4-5-20250929 --run-attack --replay-with-policies
+```
 
 The model **must be identical** in both steps (the replay looks the trace up by
 pipeline name). Do **not** pass `--q-llm` in step 1, or the trace path won't
