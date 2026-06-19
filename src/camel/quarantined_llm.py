@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import time
 from typing import TypeVar
 
@@ -94,13 +95,30 @@ def query_quarantined_llm(
     model = pydantic_ai.Agent(llm, result_type=output_model, retries=retries, system_prompt=_SYSTEM_PROMPT)
     # 保证LLM输出符合output_model的格式
 
-    res = model.run_sync(query).data
+    debug = bool(os.getenv("CAMEL_DEBUG_QLLM"))
+    if debug:
+        print("=" * 80)
+        print(f"[Q-LLM] schema: {output_schema.__name__}")
+        print(f"[Q-LLM] query:\n{query}")
+    try:
+        res = model.run_sync(query).data
+    except Exception as e:
+        if debug:
+            print(f"[Q-LLM] FAILED: {type(e).__name__}: {e}")
+            print("=" * 80)
+        raise
+
+    if debug:
+        print(f"[Q-LLM] output: {res!r}")
+        print("=" * 80)
 
     if isinstance(llm, str) and "gemini" in llm and "exp" in llm:
         time.sleep(6)
 
     # q-LLM 返回两个东西：结果 + 能不能做。如果不能做，直接抛异常。
     if not res.have_enough_information:  # type: ignore
+        if debug:
+            print("[Q-LLM] have_enough_information=False -> NotEnoughInformationError")
         raise NotEnoughInformationError()
 
     if issubclass(output_schema, BaseModel):
