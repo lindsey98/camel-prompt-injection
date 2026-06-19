@@ -27,7 +27,7 @@ no-attack CaMeL utility — used in the examples below — are:
 `openai:o3-2025-04-16` (with `--reasoning-effort high`),
 `openai:o4-mini-2025-04-16` (with `--reasoning-effort high`), 
 `anthropic:claude-sonnet-4-5-20250929`, and 
-`google:gemini-flash-latest`.
+`google:gemini-2.5-flash-lite`.
 
 By default a run reports **utility** (no attack). Add `--run-attack` to also
 report **security** under AgentDojo's `important_instructions` attack.

@@ -39,8 +39,8 @@ _oai_thinking_models_with_effort = {
 _supported_model_names = {
     "gemini-2.5-flash-preview-05-20": "AI model developed by Google",
     "gemini-2.5-flash": "AI model developed by Google",
-    "gemini-2.5-pro-preview-06-05": "AI model developed by Google",
-    "gemini-2.0-flash-lite-001": "AI model developed by Google",
+     "gemini-2.5-flash-lite": "AI model developed by Google",
+     "gemini-2.5-pro-preview-06-05": "AI model developed by Google",
      "claude-3-5-haiku-20241022": "Claude",
     "claude-3-5-sonnet-20241022": "Claude",
     "claude-3-7-sonnet-20250219": "Claude",
@@ -52,6 +52,7 @@ _supported_model_names = {
     "gpt-4.1-2025-04-14": "ChatGPT",
     "gpt-4.1-nano-2025-04-14": "ChatGPT",
     "Llama-3.3-70B-Instruct": "Llama",
+    "Qwen3-30B-A3B-Instruct-2507": "Qwen",
 } | _oai_thinking_models_with_effort
 suffixes = ["", "+camel", "+camel+secpol", "+camel+secpol+strict"]
 
