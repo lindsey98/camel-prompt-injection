@@ -68,6 +68,7 @@ def query_quarantined_llm(
       - `enum.Enum` classes
       - `pydantic.BaseModel` classes that you can define (assume that `BaseModel` is imported from `pydantic`) or are already defined in these instructions.
       - `pydantic.EmailStr` (assume that `EmailStr` is imported from `pydantic`)
+      - `list`, `tuple`, and `dict` of the above types (prefer parametrized types such as `dict[str, str]` or `list[int]` so the parsing is accurate).
     """
 
     enough_information = (
