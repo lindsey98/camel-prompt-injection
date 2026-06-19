@@ -21,6 +21,28 @@ from rich.syntax import Syntax
 from rich.text import Text
 
 
+def _content_to_str(content) -> str:
+    """Normalizes a message ``content`` field to a plain string.
+
+    AgentDojo logs store ``content`` either as a plain string (older format) or as a
+    list of content blocks like ``[{"type": "text", "content": "..."}]`` (newer
+    format). It can also be ``None`` (e.g. the final empty assistant turn).
+    """
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                parts.append(str(block.get("content", "")))
+            else:
+                parts.append(str(block))
+        return "".join(parts)
+    return str(content)
+
+
 def print_conversation_from_json(json_file_path):
     """
     Prints the conversation from a JSON file in a nice format using rich.
@@ -67,18 +89,18 @@ def print_conversation_from_json(json_file_path):
 
         for message in data.get("messages", []):
             role = message.get("role")
-            content = message.get("content", "")
+            content = _content_to_str(message.get("content"))
 
             if role == "user":
                 role_text = Text("User", style="bold blue")
-                panel_content = Text.from_markup(content)
+                panel_content = Text(content)
 
             elif role == "assistant":
                 role_text = Text("Assistant", style="bold green")
                 panel_elements = []
                 parts = content.split("```python")  # Split by python code blocks
 
-                panel_elements.append(Text.from_markup(parts[0]))  # Add text before first code block
+                panel_elements.append(Text(parts[0]))  # Add text before first code block
 
                 for i in range(1, len(parts)):
                     code_block_parts = parts[i].split("```")  # Split code block part by closing backticks
@@ -86,7 +108,7 @@ def print_conversation_from_json(json_file_path):
                     syntax = Syntax(code, "python", theme="monokai", line_numbers=False, word_wrap=True)
                     panel_elements.append(syntax)  # Append the Syntax object directly
                     if len(code_block_parts) > 1:  # Add text after code block if any
-                        panel_elements.append(Text.from_markup(code_block_parts[1]))
+                        panel_elements.append(Text(code_block_parts[1]))
                     else:
                         panel_elements.append(Text(""))  # Add empty text if no text after code block
 
@@ -94,10 +116,10 @@ def print_conversation_from_json(json_file_path):
 
             elif role == "tool":
                 role_text = Text(f"Tool - {message['tool_call']['function']}", style="bold magenta")
-                panel_content = Text.from_markup(content)
+                panel_content = Text(content)
             else:
                 role_text = Text(role.capitalize(), style="bold yellow")
-                panel_content = Text.from_markup(content)
+                panel_content = Text(content)
 
             panel = Panel(
                 panel_content,  # Pass panel_content (which is now a Group)
