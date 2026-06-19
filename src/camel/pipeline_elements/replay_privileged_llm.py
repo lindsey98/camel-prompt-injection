@@ -16,7 +16,7 @@ import dataclasses
 import inspect
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TypeAlias, TypeVar
+from typing import Any, TypeAlias, TypeVar
 
 import pydantic
 import yaml
@@ -62,7 +62,7 @@ def _make_quarantined_llm_fn(messages: list[ad_types.ChatToolResultMessage]) -> 
     calls = [message for message in messages if message["tool_call"].function == "query_ai_assistant"]
     i = 0
 
-    def query_ai_assistant(query: str, output_schema: type[_T]) -> _T:
+    def query_ai_assistant(query: str, output_schema: Any) -> _T:
         nonlocal i
         if i >= len(calls):
             raise quarantined_llm.NotEnoughInformationError()
