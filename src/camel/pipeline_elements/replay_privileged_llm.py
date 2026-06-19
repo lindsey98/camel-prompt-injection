@@ -232,7 +232,8 @@ def replay_task(
             error_messages = make_error_messages(turn.code, res.error)
             messages = [*messages, *tool_call_messages, *error_messages]
 
-    if messages[-1]["role"] == "user" and "\n\nTraceback" in ad_types.get_text_content_as_str(messages[-1]["content"]):
+    # AgentDojo requires the conversation to end with an assistant message.
+    if messages and messages[-1]["role"] != "assistant":
         messages.append(ad_types.ChatAssistantMessage(role="assistant", content=None, tool_calls=None))
 
     return messages, env
