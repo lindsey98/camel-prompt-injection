@@ -493,9 +493,10 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
                 break  # Exit loop if no error
 
         extra_args["camel_namespace"] = namespace
-        if messages[-1]["role"] == "user" and "\n\nTraceback" in ad_types.get_text_content_as_str(
-            messages[-1]["content"]
-        ):
+        # AgentDojo requires the conversation to end with an assistant message. If the
+        # last attempt ended on an error (a `user` traceback message) or any other
+        # non-assistant message, append an empty assistant turn.
+        if messages and messages[-1]["role"] != "assistant":
             messages = [*messages, ad_types.ChatAssistantMessage(role="assistant", content=None, tool_calls=None)]
 
         return query, runtime, env, messages, extra_args
