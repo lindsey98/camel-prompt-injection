@@ -78,7 +78,8 @@ def query_quarantined_llm(
         ),
     )
 
-    if issubclass(output_schema, BaseModel):
+    schema_is_base_model = isinstance(output_schema, type) and issubclass(output_schema, BaseModel)
+    if schema_is_base_model:
         output_model = create_model(
             output_schema.__name__,
             __base__=output_schema,
@@ -95,7 +96,7 @@ def query_quarantined_llm(
     debug = bool(os.getenv("CAMEL_DEBUG_QLLM"))
     if debug:
         print("=" * 80)
-        print(f"[Q-LLM] schema: {output_schema.__name__}")
+        print(f"[Q-LLM] schema: {getattr(output_schema, '__name__', output_schema)}")
         print(f"[Q-LLM] query:\n{query}")
     try:
         res = model.run_sync(query).data
@@ -117,6 +118,6 @@ def query_quarantined_llm(
             print("[Q-LLM] have_enough_information=False -> NotEnoughInformationError")
         raise NotEnoughInformationError()
 
-    if issubclass(output_schema, BaseModel):
+    if schema_is_base_model:
         return res  # type: ignore
     return res.output  # type: ignore

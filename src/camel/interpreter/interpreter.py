@@ -487,6 +487,21 @@ def _eval_subscript_load(
                 return EvalResult(
                     result.Error(CaMeLException(e, (node,), (slice, obj))), namespace, tool_calls_chain, dependencies
                 )
+        case value.CaMeLClass() | value.CaMeLBuiltin() if isinstance(obj.raw, type):
+            # Type parameterization such as `dict[str, str]` or `list[int]` (used e.g.
+            # to specify the `output_schema` of `query_ai_assistant`).
+            try:
+                parametrized = obj.raw[slice.raw]
+            except TypeError:
+                return EvalResult(type_error, namespace, tool_calls_chain, dependencies)
+            wrapped = value.CaMeLClass(
+                getattr(parametrized, "__name__", str(parametrized)),
+                parametrized,
+                Capabilities.camel(),
+                (obj, slice),
+                {},
+            )
+            return EvalResult(result.Ok(wrapped), namespace, tool_calls_chain, dependencies)
         case _:
             return EvalResult(type_error, namespace, tool_calls_chain, dependencies)
 
