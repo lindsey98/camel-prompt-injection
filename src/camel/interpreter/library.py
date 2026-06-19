@@ -83,6 +83,7 @@ BUILT_IN_FUNCTIONS: dict[str, value.CaMeLBuiltin] = {
     "any": value.make_camel_builtin("any", any),
     "all": value.make_camel_builtin("all", all),
     "bool": value.make_camel_builtin("bool", camel_bool),
+    "dict": value.make_camel_builtin("dict", dict),
     "dir": value.make_camel_builtin("dir", camel_dir),
     "divmod": value.make_camel_builtin("divmod", divmod),
     # We don't want lazy objects, so `enumerate` must return a list

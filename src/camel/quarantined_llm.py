@@ -69,6 +69,7 @@ def query_quarantined_llm(
       - `enum.Enum` classes
       - `pydantic.BaseModel` classes that you can define (assume that `BaseModel` is imported from `pydantic`) or are already defined in these instructions.
       - `pydantic.EmailStr` (assume that `EmailStr` is imported from `pydantic`)
+      - `list`, `tuple`, and `dict` of the above types (prefer parametrized types such as `dict[str, str]` or `list[int]` so the parsing is accurate).
     """
 
     enough_information = (
@@ -80,7 +81,9 @@ def query_quarantined_llm(
 
     # output_model 是动态创建的 Pydantic 模型，分两种情况
     # BaseModel 是Pydantic 的基类，作用是声明数据结构并自动做类型校验，普通 dataclass声明类型但不校验
-    if issubclass(output_schema, BaseModel): # # create_model 在它基础上加一个字段
+    # isinstance(.., type) 守卫:像 dict[str, str] 这样的泛型别名不是 type,走 else 分支交给 pydantic
+    schema_is_base_model = isinstance(output_schema, type) and issubclass(output_schema, BaseModel)
+    if schema_is_base_model:  # create_model 在它基础上加一个字段
         output_model = create_model(
             output_schema.__name__,
             __base__=output_schema,
@@ -98,7 +101,7 @@ def query_quarantined_llm(
     debug = bool(os.getenv("CAMEL_DEBUG_QLLM"))
     if debug:
         print("=" * 80)
-        print(f"[Q-LLM] schema: {output_schema.__name__}")
+        print(f"[Q-LLM] schema: {getattr(output_schema, '__name__', output_schema)}")
         print(f"[Q-LLM] query:\n{query}")
     try:
         res = model.run_sync(query).data
@@ -121,6 +124,6 @@ def query_quarantined_llm(
             print("[Q-LLM] have_enough_information=False -> NotEnoughInformationError")
         raise NotEnoughInformationError()
 
-    if issubclass(output_schema, BaseModel):
+    if schema_is_base_model:
         return res  # type: ignore
     return res.output  # type: ignore
