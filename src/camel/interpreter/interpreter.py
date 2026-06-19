@@ -2253,12 +2253,17 @@ def _eval_class_def(
     eval_args: EvalArgs,
 ) -> EvalResult:
     """Evaluates a class definition."""
-    if node.name in namespace.variables:
+    # Re-defining a user class is allowed (it simply overwrites the previous one): the
+    # retry loop keeps the namespace across attempts and re-runs the whole resubmitted
+    # code, so forbidding it would make every retry that re-declares a class fail. We
+    # still forbid shadowing built-ins (e.g. `dict`, `datetime`, `BaseModel`).
+    existing = namespace.variables.get(node.name)
+    if existing is not None and getattr(existing, "is_builtin", False):
         return EvalResult(
             result.Error(
                 CaMeLException(
                     TypeError(
-                        f"You are trying to re-define the already existing class {node.name}. Use directly {node.name} without defining it again."
+                        f"You are trying to re-define the built-in '{node.name}'. Use a different class name."
                     ),
                     (node,),
                     (),
