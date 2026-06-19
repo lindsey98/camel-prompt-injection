@@ -103,12 +103,12 @@ def format_camel_exception(camel_exception: interpreter.CaMeLException, code: st
     else:
         exception_text = "<The exception was redacted because it came from an untrusted source. Try to infer what the problem was from the context provided.>"
     return f"""
-Traceback (most recent call last):
-File "<stdin>", line {camel_exception.nodes[-1].lineno}, in <module>
-{formatted_code}
-
-{type(exception).__name__}: {exception_text}
-"""
+        Traceback (most recent call last):
+        File "<stdin>", line {camel_exception.nodes[-1].lineno}, in <module>
+        {formatted_code}
+        
+        {type(exception).__name__}: {exception_text}
+        """
 
 
 def make_error_messages(code: str, interpretation_error: interpreter.CaMeLException) -> list[ad_types.ChatMessage]:
