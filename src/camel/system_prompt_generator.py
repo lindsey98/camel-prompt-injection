@@ -336,8 +336,10 @@ While generating the code, follow these rules:
 - You are absolutely not allowed to use `eval` or `exec`.
 - You can't use `break` and `continue` statements.
 - Defining new functions with `def` or `lambda` is not supported.
-- You are not allowed to use methods with side-effects (e.g., `dict.clear` or `list.append`).
-  Use instead functional alternatives such as comprehensions or the [*l, new_element] syntax.
+- In-place mutation of lists and dicts is supported (e.g., `list.append`, `list.extend`,
+  `list.insert`, `list.pop`, `list.remove`, `list.clear`, `dict.update`, `dict.pop`,
+  `dict.setdefault`, `dict.clear`). Functional alternatives such as comprehensions or the
+  `[*l, new_element]` syntax also work.
 """
 
 
