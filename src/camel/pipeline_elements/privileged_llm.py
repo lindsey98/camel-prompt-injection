@@ -416,7 +416,7 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
         """Generates and interprets code which expresses the user query."""
         privileged_llm_messages = []
 
-        def query_ai_assistant(query: str, output_schema: type[_T]) -> _T:
+        def query_ai_assistant(query: str, output_schema: Any) -> _T:
             # query_ai_assistant 是暴露给 p-LLM 的接口，让它能把不可信数据交给 q-LLM 处理。
             return quarantined_llm.query_quarantined_llm(
                 llm=(self.quarantined_llm_model),
