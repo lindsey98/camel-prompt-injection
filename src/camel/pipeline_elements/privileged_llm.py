@@ -112,6 +112,17 @@ File "<stdin>", line {camel_exception.nodes[-1].lineno}, in <module>
 
 
 def make_error_messages(code: str, interpretation_error: interpreter.CaMeLException) -> list[ad_types.ChatMessage]:
+    extra_hint = ""
+    if isinstance(interpretation_error.exception, quarantined_llm.NotEnoughInformationError):
+        extra_hint = (
+            "\nThis error means `query_ai_assistant` did not have enough information to extract the "
+            "requested data for one of the items. If you called it inside a loop (one item at a time), "
+            "do NOT keep querying items one by one: a single item without the needed information aborts "
+            "the whole loop. Instead make ONE `query_ai_assistant` call over ALL the items at once with a "
+            "`list[...]` output schema (e.g. `list[Hobby]`); the assistant returns only the items it can "
+            "extract and silently skips the ones it cannot, so a single missing item no longer fails "
+            "everything.\n"
+        )
     return [
         ad_types.ChatAssistantMessage(
             role="assistant",
@@ -124,7 +135,7 @@ def make_error_messages(code: str, interpretation_error: interpreter.CaMeLExcept
                 ad_types.text_content_block_from_string(f"""\
 Running the code gave the following error:
 {format_camel_exception(interpretation_error, code)}
-Provide the new code with the error fixed. Provide *all the code* so that I \
+{extra_hint}Provide the new code with the error fixed. Provide *all the code* so that I \
 can directly run it. If the error comes from a search query that did not \
 return any results, then try the query with different parameters. The code \
 up to the line before the one where the exception was thrown has already been \
