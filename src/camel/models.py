@@ -158,6 +158,49 @@ def _make_context_safe(llm: agent_pipeline.BasePipelineElement) -> agent_pipelin
     return llm
 
 
+def _disable_google_safety(client) -> None:
+    """Inject ``safety_settings=OFF`` into a google-genai client's generate_content.
+
+    Gemini's safety filters can return a candidate with no content parts (logged by
+    AgentDojo as "no content parts"), which silently fails the turn. AgentDojo's
+    GoogleLLM does not expose safety settings, so we wrap the client to set them when
+    the caller hasn't. Set CAMEL_KEEP_GOOGLE_SAFETY=1 to keep the default filters.
+    """
+    if os.getenv("CAMEL_KEEP_GOOGLE_SAFETY"):
+        return
+    try:
+        from google.genai import types
+
+        off_settings = [
+            types.SafetySetting(category=category, threshold="OFF")
+            for category in (
+                "HARM_CATEGORY_HARASSMENT",
+                "HARM_CATEGORY_HATE_SPEECH",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "HARM_CATEGORY_DANGEROUS_CONTENT",
+            )
+        ]
+    except Exception as e:  # pragma: no cover - depends on google-genai internals
+        warnings.warn(f"Could not build Google safety settings ({e}); leaving defaults.")
+        return
+
+    original_generate = client.models.generate_content
+
+    def generate_content(*args, **kwargs):
+        config = kwargs.get("config")
+        if config is not None and getattr(config, "safety_settings", None) is None:
+            try:
+                config.safety_settings = off_settings
+            except Exception:
+                pass
+        return original_generate(*args, **kwargs)
+
+    try:
+        client.models.generate_content = generate_content  # type: ignore[method-assign]
+    except (AttributeError, TypeError) as e:  # pragma: no cover
+        warnings.warn(f"Could not disable Google safety filters ({e}).")
+
+
 def make_tools_pipeline(
     model: KnownModelName,
     use_original: bool,
@@ -175,6 +218,7 @@ def make_tools_pipeline(
         # llm = GoogleLLM(model.split(":")[1])
         # client = genai.Client(vertexai=True, project=os.getenv("GCP_PROJECT"), location=os.getenv("GCP_LOCATION"))
         client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+        _disable_google_safety(client)
         if model == "google:gemini-2.0-flash-lite-001":
             max_tokens = 8192
         else:
