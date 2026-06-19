@@ -317,6 +317,36 @@ class CaMeLMutableSequence(Generic[_MCT, _V], CaMeLSequence[_MCT, _V]):
         self._python_value[index.raw] = value
         return CaMeLNone(Capabilities.camel(), (self, index))
 
+    # In-place mutations. These operate on the wrapped `CaMeLValue` elements (not the
+    # raw values), so each element keeps its own capabilities/source and the security
+    # tracking is preserved -- same approach as `set_index`.
+    def append(self, value: _V) -> "CaMeLNone":
+        self._python_value.append(value)
+        return CaMeLNone(Capabilities.camel(), (self, value))
+
+    def extend(self, other: "CaMeLSequence") -> "CaMeLNone":
+        self._python_value.extend(other._python_value)
+        return CaMeLNone(Capabilities.camel(), (self, other))
+
+    def insert(self, index: "CaMeLInt", value: _V) -> "CaMeLNone":
+        self._python_value.insert(index.raw, value)
+        return CaMeLNone(Capabilities.camel(), (self, index, value))
+
+    def pop(self, *index: "CaMeLInt") -> _V:
+        i = index[0].raw if index else -1
+        return self._python_value.pop(i).new_with_dependencies((self,))
+
+    def remove(self, value: _V) -> "CaMeLNone":
+        for i, element in enumerate(self._python_value):
+            if element.eq(value).raw:
+                del self._python_value[i]
+                return CaMeLNone(Capabilities.camel(), (self, value))
+        raise ValueError("list.remove(x): x not in list")
+
+    def clear(self) -> "CaMeLNone":
+        self._python_value.clear()
+        return CaMeLNone(Capabilities.camel(), (self,))
+
 
 class CaMeLIterator(Generic[_V], CaMeLValue[Iterator[_V]]):
     def freeze(self) -> "CaMeLNone":
@@ -408,6 +438,36 @@ class CaMeLMutableMapping(Generic[_MMT, _KV, _VV], CaMeLMapping[_MMT, _KV, _VV])
         else:
             new_dict_key = dict_key
         self._python_value[new_dict_key] = value
+        return CaMeLNone(Capabilities.camel(), (self,))
+
+    def _find_key(self, key: _KV) -> "_KV | None":
+        return next((el for el in self.iterate_python() if el.eq(key).raw), None)
+
+    def update(self, other: "CaMeLMapping") -> "CaMeLNone":
+        for k in list(other.iterate_python()):
+            self.set_key(k, other._python_value[k])
+        return CaMeLNone(Capabilities.camel(), (self, other))
+
+    def setdefault(self, key: _KV, *default: _VV) -> "CaMeLValue":
+        existing_key = self._find_key(key)
+        if existing_key is not None:
+            return self._python_value[existing_key].new_with_dependencies((self, key))
+        default_value: CaMeLValue = default[0] if default else CaMeLNone(Capabilities.camel(), ())
+        self.set_key(key, default_value)
+        return default_value.new_with_dependencies((self, key))
+
+    def pop(self, key: _KV, *default: _VV) -> "CaMeLValue":
+        existing_key = self._find_key(key)
+        if existing_key is not None:
+            popped = self._python_value[existing_key]
+            del self._python_value[existing_key]
+            return popped.new_with_dependencies((self, key))
+        if default:
+            return default[0].new_with_dependencies((self, key))
+        raise KeyError(key.raw)
+
+    def clear(self) -> "CaMeLNone":
+        self._python_value.clear()
         return CaMeLNone(Capabilities.camel(), (self,))
 
 
@@ -1458,3 +1518,33 @@ class CaMeLBuiltin(Generic[_T], CaMeLCallable[_T]):
 
 def make_camel_builtin(name: str, fn: Callable[..., _T], is_class_method: bool = False) -> CaMeLBuiltin[_T]:
     return CaMeLBuiltin(name, fn, Capabilities.camel(), (), is_class_method)
+
+
+class CaMeLMutatingBuiltin(CaMeLBuiltin[_T]):
+    """A built-in *method* that mutates its receiver in place (e.g. ``list.append``).
+
+    Unlike ``CaMeLBuiltin``, its ``call`` operates on the wrapped ``CaMeLValue``s (so
+    the receiver's internal state is actually mutated and each element keeps its own
+    capabilities) and it does **not** run the raw-argument side-effect detection.
+    ``_python_value`` is an unbound method of a CaMeL value class that takes the
+    receiver as its first argument.
+    """
+
+    def bind_recv(self, recv: CaMeLValue) -> None:
+        # Only record the receiver; do not build a python-level bound method (the
+        # underlying function expects the CaMeLValue receiver, not its raw value).
+        self._recv = recv
+
+    def call(
+        self, args: "CaMeLTuple", kwargs: "CaMeLDict[CaMeLStr, CaMeLValue]", namespace: "ns.Namespace"
+    ) -> tuple[CaMeLValue[_T], dict[str, Any]]:
+        # `_eval_call` prepends the receiver as the first positional argument.
+        recv, *method_args = args._python_value
+        kwarg_values = {k.raw: v for k, v in kwargs._python_value.items()}
+        output = self._python_value(recv, *method_args, **kwarg_values)
+        args_by_keyword = self._make_args_by_keyword(args, kwargs)
+        return output, args_by_keyword
+
+
+def make_camel_mutating_method(name: str, fn: Callable[..., _T]) -> CaMeLMutatingBuiltin[_T]:
+    return CaMeLMutatingBuiltin(name, fn, Capabilities.camel(), ())
