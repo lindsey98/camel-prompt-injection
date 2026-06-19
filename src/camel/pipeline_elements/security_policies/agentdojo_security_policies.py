@@ -20,9 +20,9 @@ from agentdojo.default_suites.v1.workspace.task_suite import (
 )
 from agentdojo.functions_runtime import TaskEnvironment
 
-from camel.capabilities import is_trusted
-from camel.interpreter.value import CaMeLValue
-from camel.security_policy import Allowed, Denied, SecurityPolicy, SecurityPolicyEngine, SecurityPolicyResult
+from src.camel.capabilities import is_trusted
+from src.camel.interpreter.value import CaMeLValue
+from src.camel.security_policy import Allowed, Denied, SecurityPolicy, SecurityPolicyEngine, SecurityPolicyResult
 
 _E = TypeVar("_E", bound=TaskEnvironment)
 

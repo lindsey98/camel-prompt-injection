@@ -23,12 +23,12 @@ from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeGuard, TypeVar, ru
 import pydantic
 from typing_extensions import Self
 
-from camel.capabilities import Capabilities, readers, sources
-from camel.conditional_cache import conditional_lru_cache
-from camel.interpreter import op_protocols
+from src.camel.capabilities import Capabilities, readers, sources
+from src.camel.conditional_cache import conditional_lru_cache
+from src.camel.interpreter import op_protocols
 
 if TYPE_CHECKING:
-    from camel.interpreter import namespace as ns
+    from src.camel.interpreter import namespace as ns
 
 
 class FunctionCallWithSideEffectError(Exception): ...
@@ -830,7 +830,7 @@ class CaMeLStr(
 
     def attr(self, name) -> CaMeLValue | None:
         # need local import because of otherwise circular import
-        from camel.interpreter import library
+        from src.camel.interpreter import library
 
         attr = library.SUPPORTED_BUILT_IN_METHODS[self.raw_type].get(name)
         if attr is not None:
@@ -839,7 +839,7 @@ class CaMeLStr(
 
     def attr_names(self) -> set[str]:
         # need local import because of otherwise circular import
-        from camel.interpreter import library
+        from src.camel.interpreter import library
 
         return set(library.SUPPORTED_BUILT_IN_METHODS[self.raw_type].keys())
 
@@ -939,7 +939,7 @@ class CaMeLList(
 
     def attr(self, name) -> CaMeLValue | None:
         # need local import because of otherwise circular import
-        from camel.interpreter import library
+        from src.camel.interpreter import library
 
         attr = library.SUPPORTED_BUILT_IN_METHODS[self.raw_type].get(name)
         if attr is not None:
@@ -948,7 +948,7 @@ class CaMeLList(
 
     def attr_names(self) -> set[str]:
         # need local import because of otherwise circular import
-        from camel.interpreter import library
+        from src.camel.interpreter import library
 
         return set(library.SUPPORTED_BUILT_IN_METHODS[self.raw_type].keys())
 
@@ -1042,7 +1042,7 @@ class CaMeLDict(
 
     def attr(self, name) -> CaMeLValue | None:
         # need local import because of otherwise circular import
-        from camel.interpreter import library
+        from src.camel.interpreter import library
 
         attr = library.SUPPORTED_BUILT_IN_METHODS[self.raw_type].get(name)
         if attr is not None:
@@ -1051,7 +1051,7 @@ class CaMeLDict(
 
     def attr_names(self) -> set[str]:
         # need local import because of otherwise circular import
-        from camel.interpreter import library
+        from src.camel.interpreter import library
 
         return set(library.SUPPORTED_BUILT_IN_METHODS[self.raw_type].keys())
 

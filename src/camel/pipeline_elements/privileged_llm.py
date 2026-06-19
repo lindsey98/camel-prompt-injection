@@ -31,15 +31,15 @@ from agentdojo.default_suites.v1.workspace.task_suite import (
 )
 from pydantic_ai.models import KnownModelName
 
-from camel import quarantined_llm, system_prompt_generator
-from camel.capabilities import is_trusted
-from camel.interpreter import interpreter, result
-from camel.interpreter import namespace as ns
-from camel.interpreter.value import CaMeLValue
-from camel.pipeline_elements.agentdojo_function import (
+from src.camel import quarantined_llm, system_prompt_generator
+from src.camel.capabilities import is_trusted
+from src.camel.interpreter import interpreter, result
+from src.camel.interpreter import namespace as ns
+from src.camel.interpreter.value import CaMeLValue
+from src.camel.pipeline_elements.agentdojo_function import (
     make_agentdojo_namespace,
 )
-from camel.pipeline_elements.security_policies import (
+from src.camel.pipeline_elements.security_policies import (
     AgentDojoSecurityPolicyEngine,
 )
 
@@ -260,7 +260,7 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
 
         eval_args = interpreter.EvalArgs(self.security_policy_engine(env), self.eval_mode)
 
-        print(code)
+        # print(code)
 
         interpreter_res, updated_namespace, tool_calls, dependencies = interpreter.parse_and_interpret_code(
             code, namespace, [], dependencies, eval_args
@@ -417,6 +417,7 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
         privileged_llm_messages = []
 
         def query_ai_assistant(query: str, output_schema: type[_T]) -> _T:
+            # query_ai_assistant 是暴露给 p-LLM 的接口，让它能把不可信数据交给 q-LLM 处理。
             return quarantined_llm.query_quarantined_llm(
                 llm=(self.quarantined_llm_model),
                 query=query,
@@ -424,9 +425,13 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
                 retries=self.quarantined_llm_retries,
             )
 
+        # p-LLM 生成代码时需要知道怎么调用这个函数，docstring 就是它的说明书。如果不传播，query_ai_assistant 的 docstring 是 None，p-LLM 不知道参数怎么填
         query_ai_assistant.__doc__ = quarantined_llm.query_quarantined_llm.__doc__
+        # p-LLM 生成的代码里写了 query_ai_assistant(...)，CaMeL 解释器执行到这行时去 runtime 查这个函数名，找不到就报错。注册后才能被解释器解析调用。
         runtime.register_function(query_ai_assistant)
 
+        # system_prompt 层面：告诉 p-LLM "你可以用这些类型"（软限制，LLM 可能无视）
+        # namespace 层面：解释器里直接删掉这些类（硬限制，用了直接报错）
         builtins_namespace = ns.Namespace.with_builtins()
         # Models get confused in the other suites and should not use datetime stuff
         classes_to_exclude = (
@@ -443,9 +448,12 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
         )
 
         system_prompt = self.system_prompt_generator(runtime.functions.values(), classes_to_exclude)
+        # 非 Workspace/Travel 环境里排除时间相关类，原因是注释说的：其他环境（Banking 等）里 LLM 容易在不需要时乱用 datetime，排除掉防止混淆。Workspace/Travel 需要处理日历/行程，所以保留。
+        # 本质原因是 LLM 的训练数据里 datetime 经常和金融数据一起出现，形成了强关联。
 
         if isinstance(env, BankingEnvironment):
             system_prompt += "\n\nNote that, in the transaction history, the transactions from the user have 'me' as sender, and still habe positive amounts."
+            # Banking 环境专属补丁，交易记录里用户自己的转账 sender 是 "me" 而不是真实姓名，加这句防止 LLM 理解错。
 
         if not isinstance(env, WorkspaceEnvironment):
             new_variables = {k: v for k, v in builtins_namespace.variables.items() if k not in classes_to_exclude}

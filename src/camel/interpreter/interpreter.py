@@ -29,17 +29,17 @@ import pydantic
 import pydantic_ai
 from pydantic.fields import Field, FieldInfo
 
-from camel import security_policy
-from camel.capabilities import Capabilities
-from camel.capabilities.readers import Public
-from camel.capabilities.sources import Tool
-from camel.interpreter import namespace as ns
-from camel.interpreter import (
+from src.camel import security_policy
+from src.camel.capabilities import Capabilities
+from src.camel.capabilities.readers import Public
+from src.camel.capabilities.sources import Tool
+from src.camel.interpreter import namespace as ns
+from src.camel.interpreter import (
     op_protocols,
     result,
     value,
 )
-from camel.quarantined_llm import NotEnoughInformationError
+from src.camel.quarantined_llm import NotEnoughInformationError
 
 ExceptionASTNodes: TypeAlias = ast.expr | ast.stmt | ast.excepthandler
 
@@ -63,12 +63,12 @@ class CaMeLException(Generic[_E]):
 
     def __repr__(self) -> str:
         return f"""\
-CaMeLException(
-  exception={type(self.exception).__name__}({self.exception}),
-  nodes={[ast.dump(node) for node in self.nodes]},
-  dependencies={self.get_dependencies()}
-  metadata={self.metadata}
-)"""
+            CaMeLException(
+              exception={type(self.exception).__name__}({self.exception}),
+              nodes={[ast.dump(node) for node in self.nodes]},
+              dependencies={self.get_dependencies()}
+              metadata={self.metadata}
+        )"""
 
 
 _V = TypeVar("_V", bound=value.CaMeLValue)

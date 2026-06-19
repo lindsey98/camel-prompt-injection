@@ -12,11 +12,11 @@ from google import genai
 from openai.types.chat import ChatCompletionReasoningEffort
 from pydantic_ai.models import KnownModelName
 
-from camel.interpreter.interpreter import MetadataEvalMode
-from camel.pipeline_elements.anthropic_tool_filter import AnthropicLLMToolFilter
-from camel.pipeline_elements.privileged_llm import PrivilegedLLM
-from camel.pipeline_elements.replay_privileged_llm import PrivilegedLLMReplayer, UserInjectionTasksGetter
-from camel.pipeline_elements.security_policies import (
+from src.camel.interpreter.interpreter import MetadataEvalMode
+from src.camel.pipeline_elements.anthropic_tool_filter import AnthropicLLMToolFilter
+from src.camel.pipeline_elements.privileged_llm import PrivilegedLLM
+from src.camel.pipeline_elements.replay_privileged_llm import PrivilegedLLMReplayer, UserInjectionTasksGetter
+from src.camel.pipeline_elements.security_policies import (
     ADNoSecurityPolicyEngine,
     AgentDojoSecurityPolicyEngine,
     BankingSecurityPolicyEngine,
@@ -38,18 +38,21 @@ _oai_thinking_models_with_effort = {
 }
 _supported_model_names = {
     "gemini-2.5-flash-preview-05-20": "AI model developed by Google",
-    "gemini-2.5-pro-preview-06-05": "AI model developed by Google",
-    "gemini-2.0-flash-lite-001": "AI model developed by Google",
-    "claude-3-5-haiku-20241022": "Claude",
+    "gemini-2.5-flash": "AI model developed by Google",
+     "gemini-2.5-flash-lite": "AI model developed by Google",
+     "gemini-2.5-pro-preview-06-05": "AI model developed by Google",
+     "claude-3-5-haiku-20241022": "Claude",
     "claude-3-5-sonnet-20241022": "Claude",
     "claude-3-7-sonnet-20250219": "Claude",
     "claude-sonnet-4-20250514": "Claude",
     "claude-opus-4-20250514": "Claude",
+    "claude-sonnet-4-5-20250929": "Claude",
     "gpt-4o-2024-08-06": "GPT-4",
     "gpt-4o-mini-2024-07-18": "GPT-4",
     "gpt-4.1-2025-04-14": "ChatGPT",
     "gpt-4.1-nano-2025-04-14": "ChatGPT",
     "Llama-3.3-70B-Instruct": "Llama",
+    "Qwen3-30B-A3B-Instruct-2507": "Qwen",
 } | _oai_thinking_models_with_effort
 suffixes = ["", "+camel", "+camel+secpol", "+camel+secpol+strict"]
 

@@ -21,10 +21,11 @@ from pydantic import BaseModel, Field, create_model
 from pydantic_ai import models
 
 _T = TypeVar("_T")
-
+# 是 Python 类型系统里的泛型变量，表示"某个具体类型，但现在还不确定是哪个"
+# def query_quarantined_llm(output_schema: type[_T]) -> _T: 表示 输入和输出是同一个类型
 
 class NotEnoughInformationError(Exception): ...
-
+# ... Python 的 Ellipsis，在类/函数体里等价于 pass，表示"这里没有任何实现"
 
 _SYSTEM_PROMPT = """\
 You are a helpful assistant that assists a user to parse unstructured data into structured data. \
@@ -78,20 +79,24 @@ def query_quarantined_llm(
         ),
     )
 
+    # output_model 是动态创建的 Pydantic 模型，分两种情况
+    # BaseModel 是Pydantic 的基类，作用是声明数据结构并自动做类型校验，普通 dataclass声明类型但不校验
+    # isinstance(.., type) 守卫:像 dict[str, str] 这样的泛型别名不是 type,走 else 分支交给 pydantic
     schema_is_base_model = isinstance(output_schema, type) and issubclass(output_schema, BaseModel)
-    if schema_is_base_model:
+    if schema_is_base_model:  # create_model 在它基础上加一个字段
         output_model = create_model(
             output_schema.__name__,
             __base__=output_schema,
             have_enough_information=enough_information,
         )
-    else:
+    else: # output_schema 是基本类型（str, int...）
         output_model = create_model(
             "Result",
-            output=(output_schema, Field(description="The requested value")),
+            output=(output_schema, Field(description="The requested value")), # Field(description=...) 不是给 pydantic 验证用的，是给 Quanrantined LLM 看的提示，告诉它这个字段应该填什么内容
             have_enough_information=enough_information,
         )
     model = pydantic_ai.Agent(llm, result_type=output_model, retries=retries, system_prompt=_SYSTEM_PROMPT)
+    # 保证LLM输出符合output_model的格式
 
     debug = bool(os.getenv("CAMEL_DEBUG_QLLM"))
     if debug:
@@ -113,6 +118,7 @@ def query_quarantined_llm(
     if isinstance(llm, str) and "gemini" in llm and "exp" in llm:
         time.sleep(6)
 
+    # q-LLM 返回两个东西：结果 + 能不能做。如果不能做，直接抛异常。
     if not res.have_enough_information:  # type: ignore
         if debug:
             print("[Q-LLM] have_enough_information=False -> NotEnoughInformationError")
