@@ -93,6 +93,7 @@ BUILT_IN_FUNCTIONS: dict[str, value.CaMeLBuiltin] = {
     "int": value.make_camel_builtin("int", int),
     "len": value.make_camel_builtin("len", len),
     "list": value.make_camel_builtin("list", list),
+    "dict": value.make_camel_builtin("dict", dict),
     "max": value.make_camel_builtin("max", max),
     "min": value.make_camel_builtin("min", min),
     "print": value.make_camel_builtin("print", camel_print),

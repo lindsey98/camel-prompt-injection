@@ -44,8 +44,7 @@ def main(
     Other newer models might work as well.
 
     Args:
-        model: the model to use. it should be {provider}:model_name.
-        For example, "google:gemini-2.5-pro-preview-06-05".
+        model: the model to use. it should be {provider}:model_name. For example, "google:gemini-2.5-pro-preview-06-05".
         use_original: whether to use the original model with tool calling API instead of CaMeL
         reasoning_effort: for OpenAI reasoning models. How much the model should reason. Can be "low", "medium", "high".
         thinking_budget_tokens: how many tokens Anthropic reasoning models can use. Note that Anthropic reasoning models are not supported yet.

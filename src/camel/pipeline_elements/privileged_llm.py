@@ -103,12 +103,12 @@ def format_camel_exception(camel_exception: interpreter.CaMeLException, code: st
     else:
         exception_text = "<The exception was redacted because it came from an untrusted source. Try to infer what the problem was from the context provided.>"
     return f"""
-Traceback (most recent call last):
-File "<stdin>", line {camel_exception.nodes[-1].lineno}, in <module>
-{formatted_code}
-
-{type(exception).__name__}: {exception_text}
-"""
+        Traceback (most recent call last):
+        File "<stdin>", line {camel_exception.nodes[-1].lineno}, in <module>
+        {formatted_code}
+        
+        {type(exception).__name__}: {exception_text}
+        """
 
 
 def make_error_messages(code: str, interpretation_error: interpreter.CaMeLException) -> list[ad_types.ChatMessage]:
@@ -122,19 +122,19 @@ def make_error_messages(code: str, interpretation_error: interpreter.CaMeLExcept
             role="user",
             content=[
                 ad_types.text_content_block_from_string(f"""\
-Running the code gave the following error:
-{format_camel_exception(interpretation_error, code)}
-Provide the new code with the error fixed. Provide *all the code* so that I \
-can directly run it. If the error comes from a search query that did not \
-return any results, then try the query with different parameters. The code \
-up to the line before the one where the exception was thrown has already been \
-executed and the variables and defined classes will \
-still be accessible to you. It's very important that you do not re-write code to run \
-functions that have side-effects (e.g., functions that send an email).
-""")
-            ],
-        ),
-    ]
+                Running the code gave the following error:
+                {format_camel_exception(interpretation_error, code)}
+                Provide the new code with the error fixed. Provide *all the code* so that I \
+                can directly run it. If the error comes from a search query that did not \
+                return any results, then try the query with different parameters. The code \
+                up to the line before the one where the exception was thrown has already been \
+                executed and the variables and defined classes will \
+                still be accessible to you. It's very important that you do not re-write code to run \
+                functions that have side-effects (e.g., functions that send an email).
+                """)
+                            ],
+                        ),
+            ]
 
 
 def _highlight_exception_code(

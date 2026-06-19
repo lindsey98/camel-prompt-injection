@@ -95,7 +95,7 @@ def query_quarantined_llm(
             output=(output_schema, Field(description="The requested value")), # Field(description=...) 不是给 pydantic 验证用的，是给 Quanrantined LLM 看的提示，告诉它这个字段应该填什么内容
             have_enough_information=enough_information,
         )
-    model = pydantic_ai.Agent(llm, result_type=output_model, retries=retries, system_prompt=_SYSTEM_PROMPT)
+    model = pydantic_ai.Agent(llm, output_type=output_model, retries=retries, system_prompt=_SYSTEM_PROMPT)
     # 保证LLM输出符合output_model的格式
 
     debug = bool(os.getenv("CAMEL_DEBUG_QLLM"))
