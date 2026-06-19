@@ -16,6 +16,7 @@
 
 import dataclasses
 import time
+import types
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any, TypeVar
 
@@ -65,8 +66,17 @@ def extract_print_output(tool_calls: Sequence[interpreter.FunctionCall]) -> str:
     return printed_output
 
 
+def _is_type_like(v: object) -> bool:
+    """True for values that are types or (generic) type aliases (e.g. ``dict[str, str]``).
+
+    These are not JSON-serializable and make AgentDojo's logger raise
+    "Circular reference detected", so they must be stringified before logging.
+    """
+    return isinstance(v, type | types.GenericAlias) or type(v).__module__ == "typing"
+
+
 def function_call_from_ad_function_call(function_call: interpreter.FunctionCall) -> functions_runtime.FunctionCall:
-    args = {k: (v if not isinstance(v, type) else repr(v)) for k, v in function_call.args.items()}
+    args = {k: (repr(v) if _is_type_like(v) else v) for k, v in function_call.args.items()}
     return functions_runtime.FunctionCall(function=function_call.function, args=args)
 
 
