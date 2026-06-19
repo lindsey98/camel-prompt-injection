@@ -212,6 +212,15 @@ def _disable_google_safety(client) -> None:
                 config.safety_settings = off_settings
             except Exception:
                 pass
+        # Optional: cap/disable thinking for Gemini 2.5 models that otherwise return
+        # an empty answer (finish_reason=STOP with no content parts). Set
+        # CAMEL_GOOGLE_THINKING_BUDGET (e.g. 0 for flash, 128 for pro) to enable.
+        budget = os.getenv("CAMEL_GOOGLE_THINKING_BUDGET")
+        if budget is not None and config is not None and getattr(config, "thinking_config", None) is None:
+            try:
+                config.thinking_config = types.ThinkingConfig(thinking_budget=int(budget))
+            except Exception:
+                pass
         response = original_generate(*args, **kwargs)
         _log_if_empty(response)
         return response
