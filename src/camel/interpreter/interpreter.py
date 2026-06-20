@@ -2393,7 +2393,7 @@ def _eval_class_def(
     )
     assign_res, new_namespace, new_tool_calls_chain, dependencies = _assign(
         value_value,
-        ast.Name(node.name, ast.Store()),
+        ast.Name(node.name, ast.Store(), lineno=node.lineno, col_offset=node.col_offset),
         namespace,
         tool_calls_chain,
         dependencies,
@@ -2492,7 +2492,7 @@ def _eval_function_def(
 
     function_value = value.CaMeLFunction(node.name, function_impl, Capabilities.camel(), tuple(dependencies))
     assign_res, namespace, tool_calls_chain, dependencies = _assign(
-        function_value, ast.Name(node.name, ast.Store()), namespace, tool_calls_chain, dependencies, eval_args
+        function_value, ast.Name(node.name, ast.Store(), lineno=node.lineno, col_offset=node.col_offset), namespace, tool_calls_chain, dependencies, eval_args
     )
     if isinstance(assign_res, result.Error):
         return EvalResult(assign_res, namespace, tool_calls_chain, dependencies)

@@ -112,6 +112,7 @@ def make_ad_tool_calls(
 def format_camel_exception(camel_exception: interpreter.CaMeLException, code: str) -> str:
     exception = camel_exception.exception
     node = camel_exception.nodes[-1]
+    lineno = node.lineno if hasattr(node, "lineno") else 0
     try:
         extracted_code = interpreter.extract_code_block(code)
     except interpreter.InvalidOutputError:
@@ -119,7 +120,7 @@ def format_camel_exception(camel_exception: interpreter.CaMeLException, code: st
     formatted_code = _highlight_exception_code(
         extracted_code,
         camel_exception.exception,
-        node.lineno,
+        lineno,
         node.col_offset if hasattr(node, "col_offset") else 0,
         node.end_lineno if hasattr(node, "end_lineno") else None,
         node.end_col_offset if hasattr(node, "end_col_offset") else None,
@@ -130,9 +131,9 @@ def format_camel_exception(camel_exception: interpreter.CaMeLException, code: st
         exception_text = "<The exception was redacted because it came from an untrusted source. Try to infer what the problem was from the context provided.>"
     return f"""
         Traceback (most recent call last):
-        File "<stdin>", line {camel_exception.nodes[-1].lineno}, in <module>
+        File "<stdin>", line {lineno}, in <module>
         {formatted_code}
-        
+
         {type(exception).__name__}: {exception_text}
         """
 
