@@ -2420,6 +2420,42 @@ def _eval_function_def(
     )
 
 
+def _eval_lambda(
+    node: ast.Lambda,
+    namespace: ns.Namespace,
+    tool_calls_chain: Sequence[FunctionCall],
+    dependencies: Iterable[value.CaMeLValue],
+    eval_args: EvalArgs,
+) -> EvalResult:
+    """Evaluates a lambda into a callable that interprets its body on each call.
+
+    The lambda captures the namespace at definition time. When called -- either directly
+    from interpreted code or as a `key=`/`func` argument to a builtin like `sorted`,
+    `max`, `min`, `filter` or `map`, which call it on raw values -- it wraps the raw
+    arguments back into CaMeL values, binds them to the parameter names, interprets the
+    body, and returns the raw result.
+    """
+    arg_names = [a.arg for a in node.args.args]
+    captured_namespace = namespace
+    body = node.body
+
+    def lambda_impl(*raw_args):
+        local_vars = {
+            name: value.value_from_raw(raw, Capabilities.camel(), captured_namespace, ())
+            for name, raw in zip(arg_names, raw_args)
+        }
+        local_namespace = captured_namespace.add_variables(local_vars)
+        body_result, _, _, _ = camel_eval(body, local_namespace, [], (), eval_args)
+        match body_result:
+            case result.Ok(v):
+                return v.raw
+            case result.Error(camel_exception):
+                raise camel_exception.exception
+
+    lambda_value = value.CaMeLFunction("<lambda>", lambda_impl, Capabilities.camel(), tuple(dependencies))
+    return EvalResult(result.Ok(lambda_value), namespace, tool_calls_chain, dependencies)
+
+
 def camel_eval(
     node: ast.AST,
     namespace: ns.Namespace,
@@ -2546,15 +2582,7 @@ def camel_eval(
             )
         # Function and class definitions (not supported)
         case ast.Lambda():
-            return EvalResult(
-                _make_not_implemented_error(
-                    node,
-                    "Defining lambda functions is not supported. If you are operating on a list, consider using a list comprehension or a for loop.",
-                ),
-                namespace,
-                tool_calls_chain,
-                dependencies,
-            )
+            return _eval_lambda(node, namespace, tool_calls_chain, dependencies, eval_args)
         # Reuturn, yield, yield from (not supported)
         case ast.Return():
             return EvalResult(

@@ -336,7 +336,8 @@ While generating the code, follow these rules:
 - You are not allowed to import any modules. Stick to the types that are mentioned in these instructions.
 - You are absolutely not allowed to use `eval` or `exec`.
 - You can't use `break` and `continue` statements.
-- Defining new functions with `def` or `lambda` is not supported.
+- Defining new named functions with `def` is not supported. `lambda` functions ARE supported,
+  e.g. as a `key=` argument: `sorted(events, key=lambda e: e.start_time)`.
 - In-place mutation of lists and dicts is supported (e.g., `list.append`, `list.extend`,
   `list.insert`, `list.pop`, `list.remove`, `list.clear`, `dict.update`, `dict.pop`,
   `dict.setdefault`, `dict.clear`). Functional alternatives such as comprehensions or the
