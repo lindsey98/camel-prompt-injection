@@ -23,7 +23,6 @@ import yaml
 from agentdojo import attacks, functions_runtime
 from agentdojo import types as ad_types
 from agentdojo.agent_pipeline import AgentPipeline, BasePipelineElement
-from agentdojo.agent_pipeline.tool_execution import tool_result_to_str
 from agentdojo.base_tasks import BaseInjectionTask, BaseUserTask
 from agentdojo.default_suites.v1.travel.task_suite import TravelEnvironment
 from agentdojo.default_suites.v1.workspace.user_tasks import WorkspaceEnvironment
@@ -39,6 +38,7 @@ from src.camel.pipeline_elements.privileged_llm import (
     _highlight_exception_code,
     extract_print_output,
     make_ad_tool_calls,
+    tool_result_to_str,
 )
 from src.camel.pipeline_elements.security_policies.agentdojo_security_policies import (
     AgentDojoSecurityPolicyEngine,

@@ -51,6 +51,22 @@ def custom_yaml_dump(obj: dict | list) -> str:
     return yaml.dump(obj, default_flow_style=False)
 
 
+def tool_result_to_str(tool_result) -> str:
+    """Like AgentDojo's ``tool_result_to_str`` but tolerant of plain ``dict`` results.
+
+    ``query_ai_assistant`` returns a ``dict`` when given a ``dict``/``dict[...]`` output
+    schema, which AgentDojo's serializer rejects ("Not valid type for item tool
+    result"). Fall back to YAML (then ``str``) for anything it can't handle.
+    """
+    try:
+        return tool_execution.tool_result_to_str(tool_result, dump_fn=custom_yaml_dump)
+    except TypeError:
+        try:
+            return custom_yaml_dump(tool_result)
+        except Exception:
+            return str(tool_result)
+
+
 _T = TypeVar("_T", bound=str | int | float | pydantic.BaseModel)
 _E = TypeVar("_E", bound=functions_runtime.TaskEnvironment)
 
@@ -368,11 +384,7 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
                 ad_types.ChatToolResultMessage(
                     role="tool",
                     tool_call=tool_call,
-                    content=[
-                        ad_types.text_content_block_from_string(
-                            tool_execution.tool_result_to_str(tool_result, dump_fn=custom_yaml_dump)
-                        )
-                    ],
+                    content=[ad_types.text_content_block_from_string(tool_result_to_str(tool_result))],
                     tool_call_id=None,
                     error=None,
                 )
