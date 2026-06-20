@@ -19,7 +19,7 @@ From https://github.com/google/starlark-go/blob/master/starlark/library.go#L157
 
 import datetime
 import enum
-from collections.abc import Iterable, Reversible
+from collections.abc import Callable, Iterable, Reversible
 from typing import Any, TypeVar
 
 import pydantic
@@ -46,6 +46,16 @@ def camel_enumerate(x: Iterable[_T], start: int = 0) -> list[tuple[int, _T]]:
 
 def camel_reversed(x: Reversible[_T]) -> list[_T]:
     return list(reversed(x))
+
+
+# `map`/`filter` are evaluated eagerly (the interpreter does not use lazy objects). The
+# function argument is a CaMeL callable's raw (e.g. a lambda), which operates on raw values.
+def camel_map(func: Callable[..., Any], *iterables: Iterable[Any]) -> list[Any]:
+    return list(map(func, *iterables))
+
+
+def camel_filter(func: Callable[..., Any] | None, iterable: Iterable[Any]) -> list[Any]:
+    return list(filter(func, iterable))
 
 
 def camel_bool(x: object) -> bool:
@@ -88,7 +98,9 @@ BUILT_IN_FUNCTIONS: dict[str, value.CaMeLBuiltin] = {
     "divmod": value.make_camel_builtin("divmod", divmod),
     # We don't want lazy objects, so `enumerate` must return a list
     "enumerate": value.make_camel_builtin("enumerate", camel_enumerate),
+    "filter": value.make_camel_builtin("filter", camel_filter),
     "float": value.make_camel_builtin("float", float),
+    "map": value.make_camel_builtin("map", camel_map),
     "hash": value.make_camel_builtin("hash", hash),
     "int": value.make_camel_builtin("int", int),
     "len": value.make_camel_builtin("len", len),

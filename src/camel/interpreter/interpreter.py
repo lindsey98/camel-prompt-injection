@@ -1765,6 +1765,31 @@ def _eval_if_exp(
     )
 
 
+class _LoopControlSignal(Exception):
+    """Internal signal used to implement `break`/`continue`.
+
+    Carries the interpreter state (namespace / tool-call chain / dependencies) at the
+    point of the statement so the loop can resume with it, since state is threaded by
+    return values rather than mutation.
+    """
+
+    def __init__(
+        self,
+        namespace: ns.Namespace,
+        tool_calls_chain: Sequence[FunctionCall],
+        dependencies: Iterable[value.CaMeLValue],
+    ) -> None:
+        self.namespace = namespace
+        self.tool_calls_chain = tool_calls_chain
+        self.dependencies = dependencies
+
+
+class _BreakSignal(_LoopControlSignal): ...
+
+
+class _ContinueSignal(_LoopControlSignal): ...
+
+
 def _eval_for(
     node: ast.For,
     namespace: ns.Namespace,
@@ -1772,20 +1797,6 @@ def _eval_for(
     dependencies: Iterable[value.CaMeLValue],
     eval_args: EvalArgs,
 ) -> EvalResult:
-    if node.orelse:
-        return EvalResult(
-            result.Error(
-                CaMeLException(
-                    SyntaxError("orelse blocks in for loops are not supported because break is not supported."),
-                    (node,),
-                    (),
-                )
-            ),
-            namespace,
-            tool_calls_chain,
-            dependencies,
-        )
-
     iterable_res, namespace, tool_calls_chain, dependencies = camel_eval(
         node.iter, namespace, tool_calls_chain, dependencies, eval_args
     )
@@ -1810,6 +1821,7 @@ def _eval_for(
         )
 
     dependencies = [*dependencies, iterable]
+    broke = False
     for elt in iterable.iterate_python():
         assign_res, namespace, tool_calls_chain, dependencies = _assign(
             elt,
@@ -1822,22 +1834,39 @@ def _eval_for(
         if isinstance(assign_res, result.Error):
             return EvalResult(assign_res, namespace, tool_calls_chain, dependencies)
 
-        final_val_res, namespace, tool_calls_chain, dependencies = _eval_stmt_list(
-            node.body,
-            namespace,
-            tool_calls_chain,
-            # no need to add `elt` to the dependency, as whether the statement gets
-            # evaluated depends on the iterable overall, and not on `elt` directly.
-            # Of course if `elt` is used in the statement, this will be considered by
-            # the evaluation of the statement.
-            dependencies,
-            eval_args,
-        )
+        try:
+            final_val_res, namespace, tool_calls_chain, dependencies = _eval_stmt_list(
+                node.body,
+                namespace,
+                tool_calls_chain,
+                # no need to add `elt` to the dependency, as whether the statement gets
+                # evaluated depends on the iterable overall, and not on `elt` directly.
+                # Of course if `elt` is used in the statement, this will be considered by
+                # the evaluation of the statement.
+                dependencies,
+                eval_args,
+            )
+        except _ContinueSignal as signal:
+            namespace, tool_calls_chain, dependencies = signal.namespace, signal.tool_calls_chain, signal.dependencies
+            continue
+        except _BreakSignal as signal:
+            namespace, tool_calls_chain, dependencies = signal.namespace, signal.tool_calls_chain, signal.dependencies
+            broke = True
+            break
         if isinstance(final_val_res, result.Error):
             return EvalResult(final_val_res, namespace, tool_calls_chain, dependencies)
 
     dependencies = list(dependencies)
-    dependencies.remove(iterable)
+    if iterable in dependencies:
+        dependencies.remove(iterable)
+
+    # `for ... else`: the else block runs only if the loop completed without `break`.
+    if node.orelse and not broke:
+        orelse_res, namespace, tool_calls_chain, dependencies = _eval_stmt_list(
+            node.orelse, namespace, tool_calls_chain, dependencies, eval_args
+        )
+        if isinstance(orelse_res, result.Error):
+            return EvalResult(orelse_res, namespace, tool_calls_chain, dependencies)
 
     return EvalResult(result.Ok(value.CaMeLNone(Capabilities.default(), ())), namespace, tool_calls_chain, dependencies)
 
@@ -2560,19 +2589,9 @@ def camel_eval(
                 dependencies,
             )
         case ast.Break():
-            return EvalResult(
-                _make_not_implemented_error(node, "Break statements are not supported."),
-                namespace,
-                tool_calls_chain,
-                dependencies,
-            )
+            raise _BreakSignal(namespace, tool_calls_chain, dependencies)
         case ast.Continue():
-            return EvalResult(
-                _make_not_implemented_error(node, "Continue statements are not supported."),
-                namespace,
-                tool_calls_chain,
-                dependencies,
-            )
+            raise _ContinueSignal(namespace, tool_calls_chain, dependencies)
         case ast.Match():
             return EvalResult(
                 _make_not_implemented_error(node, "Match statements are not supported."),
@@ -2756,4 +2775,14 @@ def parse_and_interpret_code(
             ),
         )
         return EvalResult(result.Error(CaMeLException(e, error_nodes, ())), namespace, tool_calls_chain, dependencies)
-    return EvalResult(*camel_eval(parsed_code, namespace, tool_calls_chain, dependencies, eval_args))
+    try:
+        return EvalResult(*camel_eval(parsed_code, namespace, tool_calls_chain, dependencies, eval_args))
+    except _LoopControlSignal:
+        # `break`/`continue` outside a loop (ast.parse does not reject this).
+        error_nodes = (ast.expr(lineno=0, end_lineno=-1),)
+        return EvalResult(
+            result.Error(CaMeLException(SyntaxError("'break'/'continue' outside loop"), error_nodes, ())),
+            namespace,
+            tool_calls_chain,
+            dependencies,
+        )
