@@ -83,20 +83,29 @@ def query_quarantined_llm(
     # BaseModel 是Pydantic 的基类，作用是声明数据结构并自动做类型校验，普通 dataclass声明类型但不校验
     # isinstance(.., type) 守卫:像 dict[str, str] 这样的泛型别名不是 type,走 else 分支交给 pydantic
     schema_is_base_model = isinstance(output_schema, type) and issubclass(output_schema, BaseModel)
-    if schema_is_base_model:  # create_model 在它基础上加一个字段
-        output_model = create_model(
-            output_schema.__name__,
-            __base__=output_schema,
-            have_enough_information=enough_information,
-        )
-    else: # output_schema 是基本类型（str, int...）
-        output_model = create_model(
-            "Result",
-            output=(output_schema, Field(description="The requested value")), # Field(description=...) 不是给 pydantic 验证用的，是给 Quanrantined LLM 看的提示，告诉它这个字段应该填什么内容
-            have_enough_information=enough_information,
-        )
-    model = pydantic_ai.Agent(llm, output_type=output_model, retries=retries, system_prompt=_SYSTEM_PROMPT)
-    # 保证LLM输出符合output_model的格式
+    try:
+        if schema_is_base_model:  # create_model 在它基础上加一个字段
+            output_model = create_model(
+                output_schema.__name__,
+                __base__=output_schema,
+                have_enough_information=enough_information,
+            )
+        else:  # output_schema 是基本类型（str, int...）
+            output_model = create_model(
+                "Result",
+                output=(output_schema, Field(description="The requested value")),
+                have_enough_information=enough_information,
+            )
+        model = pydantic_ai.Agent(llm, output_type=output_model, retries=retries, system_prompt=_SYSTEM_PROMPT)
+    except RecursionError as e:
+        # A self-referential / very deeply nested output_schema makes pydantic recurse
+        # forever while building the JSON schema. Turn it into a recoverable error so the
+        # run doesn't crash (the interpreter re-raises bare RecursionErrors) and the model
+        # can retry with a simpler schema.
+        raise ValueError(
+            "The output_schema is too deeply nested or self-referential to build a schema for. "
+            "Use a simpler, non-recursive output_schema."
+        ) from e
 
     debug = bool(os.getenv("CAMEL_DEBUG_QLLM"))
     if debug:
@@ -107,6 +116,14 @@ def query_quarantined_llm(
         run_result = model.run_sync(query)
         # pydantic-ai renamed `AgentRunResult.data` to `.output` in newer versions.
         res = run_result.output if hasattr(run_result, "output") else run_result.data
+    except RecursionError as e:
+        if debug:
+            print(f"[Q-LLM] FAILED: RecursionError: {e}")
+            print("=" * 80)
+        raise ValueError(
+            "The output_schema is too deeply nested or self-referential to build a schema for. "
+            "Use a simpler, non-recursive output_schema."
+        ) from e
     except Exception as e:
         if debug:
             print(f"[Q-LLM] FAILED: {type(e).__name__}: {e}")
