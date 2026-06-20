@@ -335,7 +335,7 @@ While generating the code, follow these rules:
   `all(x > 0 for x in xs)` or `sum(f(x) for x in xs)` are allowed (they are evaluated eagerly, like a list comprehension).
 - You are not allowed to import any modules. Stick to the types that are mentioned in these instructions.
 - You are absolutely not allowed to use `eval` or `exec`.
-- You can't use `break` and `continue` statements.
+- `break` and `continue` statements are supported inside `for` loops (so is `for ... else`).
 - Defining new named functions with `def` is not supported. `lambda` functions ARE supported,
   e.g. as a `key=` argument: `sorted(events, key=lambda e: e.start_time)`.
 - In-place mutation of lists and dicts is supported (e.g., `list.append`, `list.extend`,
