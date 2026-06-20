@@ -1790,6 +1790,20 @@ class _BreakSignal(_LoopControlSignal): ...
 class _ContinueSignal(_LoopControlSignal): ...
 
 
+class _ReturnSignal(_LoopControlSignal):
+    """Signal used to implement `return` from a `def` function. Carries the returned value."""
+
+    def __init__(
+        self,
+        value: "value.CaMeLValue",
+        namespace: ns.Namespace,
+        tool_calls_chain: Sequence[FunctionCall],
+        dependencies: Iterable[value.CaMeLValue],
+    ) -> None:
+        super().__init__(namespace, tool_calls_chain, dependencies)
+        self.value = value
+
+
 def _eval_for(
     node: ast.For,
     namespace: ns.Namespace,
@@ -2440,13 +2454,50 @@ def _eval_function_def(
     dependencies: Iterable[value.CaMeLValue],
     eval_args: EvalArgs,
 ) -> EvalResult:
-    """Evaluates a function definition."""
-    return EvalResult(
-        _make_not_implemented_error(node, "Function definitions are not supported"),
-        namespace,
-        tool_calls_chain,
-        dependencies,
+    """Evaluates a function definition into a callable that interprets its body on each call.
+
+    Like a lambda but with a statement body and `return`. The function captures the
+    namespace (after it is itself defined, so recursion works), binds raw arguments to the
+    parameter names on each call, runs the body, and returns the value of the first
+    `return` it hits (or `None`). NOTE: tool calls made *inside* a function body are still
+    subject to the security policy, but are not recorded in the outer tool-call trace.
+    """
+    if node.decorator_list:
+        return EvalResult(
+            _make_not_implemented_error(node, "Decorators on functions are not supported"),
+            namespace,
+            tool_calls_chain,
+            dependencies,
+        )
+    arg_names = [a.arg for a in node.args.args]
+    body = node.body
+    # Mutable cell so the body can see the function itself (recursion) once it is assigned.
+    captured = {"namespace": namespace}
+
+    def function_impl(*raw_args):
+        local_vars = {
+            name: value.value_from_raw(raw, Capabilities.camel(), captured["namespace"], ())
+            for name, raw in zip(arg_names, raw_args)
+        }
+        call_namespace = captured["namespace"].add_variables(local_vars)
+        try:
+            body_result, _, _, _ = _eval_stmt_list(body, call_namespace, [], (), eval_args)
+        except _ReturnSignal as signal:
+            return signal.value.raw
+        match body_result:
+            case result.Ok(_):
+                return None
+            case result.Error(camel_exception):
+                raise camel_exception.exception
+
+    function_value = value.CaMeLFunction(node.name, function_impl, Capabilities.camel(), tuple(dependencies))
+    assign_res, namespace, tool_calls_chain, dependencies = _assign(
+        function_value, ast.Name(node.name, ast.Store()), namespace, tool_calls_chain, dependencies, eval_args
     )
+    if isinstance(assign_res, result.Error):
+        return EvalResult(assign_res, namespace, tool_calls_chain, dependencies)
+    captured["namespace"] = namespace
+    return EvalResult(result.Ok(value.CaMeLNone(Capabilities.default(), ())), namespace, tool_calls_chain, dependencies)
 
 
 def _eval_lambda(
@@ -2602,14 +2653,20 @@ def camel_eval(
         # Function and class definitions (not supported)
         case ast.Lambda():
             return _eval_lambda(node, namespace, tool_calls_chain, dependencies, eval_args)
-        # Reuturn, yield, yield from (not supported)
         case ast.Return():
-            return EvalResult(
-                _make_not_implemented_error(node, "Return statements are not supported."),
-                namespace,
-                tool_calls_chain,
-                dependencies,
+            if node.value is None:
+                raise _ReturnSignal(
+                    value.CaMeLNone(Capabilities.default(), ()), namespace, tool_calls_chain, dependencies
+                )
+            value_res, namespace, tool_calls_chain, dependencies = camel_eval(
+                node.value, namespace, tool_calls_chain, dependencies, eval_args
             )
+            match value_res:
+                case result.Error():
+                    return EvalResult(value_res, namespace, tool_calls_chain, dependencies)
+                case result.Ok(v):
+                    raise _ReturnSignal(v, namespace, tool_calls_chain, dependencies)
+        # yield, yield from (not supported)
         case ast.Yield():
             return EvalResult(
                 _make_not_implemented_error(node, "Yield statements are not supported."),
@@ -2778,10 +2835,17 @@ def parse_and_interpret_code(
     try:
         return EvalResult(*camel_eval(parsed_code, namespace, tool_calls_chain, dependencies, eval_args))
     except _LoopControlSignal:
-        # `break`/`continue` outside a loop (ast.parse does not reject this).
+        # `break`/`continue` outside a loop, or `return` outside a function (ast.parse
+        # does not reject these).
         error_nodes = (ast.expr(lineno=0, end_lineno=-1),)
         return EvalResult(
-            result.Error(CaMeLException(SyntaxError("'break'/'continue' outside loop"), error_nodes, ())),
+            result.Error(
+                CaMeLException(
+                    SyntaxError("'return', 'break' or 'continue' used outside of a function/loop"),
+                    error_nodes,
+                    (),
+                )
+            ),
             namespace,
             tool_calls_chain,
             dependencies,
