@@ -1151,7 +1151,7 @@ def _eval_comprehensions(
 
 
 def _eval_list_comp(
-    node: ast.ListComp,
+    node: ast.ListComp | ast.GeneratorExp,
     namespace: ns.Namespace,
     tool_calls_chain: Sequence[FunctionCall],
     dependencies: Iterable[value.CaMeLValue],
@@ -2510,17 +2510,12 @@ def camel_eval(
             return EvalResult(
                 result.Ok(value.CaMeLNone(Capabilities.camel(), ())), namespace, tool_calls_chain, dependencies
             )
-        # The following are unsupported language constructs
+        # Generator expressions are evaluated eagerly, exactly like a list
+        # comprehension (the interpreter does not use lazy objects anyway). This lets
+        # common patterns like `all(... for x in xs)` / `any(...)` / `sum(...)` work.
         case ast.GeneratorExp():
-            return EvalResult(
-                _make_not_implemented_error(
-                    node,
-                    "Generator expressions are not supported. Use a list comprehension instead if possible.",
-                ),
-                namespace,
-                tool_calls_chain,
-                dependencies,
-            )
+            return _eval_list_comp(node, namespace, tool_calls_chain, dependencies, eval_args)
+        # The following are unsupported language constructs
         case ast.While():
             return EvalResult(
                 _make_not_implemented_error(node, "While statements are not supported. Use a for loop instead."),
