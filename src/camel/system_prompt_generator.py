@@ -331,7 +331,8 @@ Keep in mind the following **extremely** important information for the code you 
 While you should write Python code, we are using a custom interpreter for your code for security reasons.
 While generating the code, follow these rules:
 
-- Do not use `while` loops and generators.
+- Do not use `while` loops or generator functions (with `yield`). Generator expressions such as
+  `all(x > 0 for x in xs)` or `sum(f(x) for x in xs)` are allowed (they are evaluated eagerly, like a list comprehension).
 - You are not allowed to import any modules. Stick to the types that are mentioned in these instructions.
 - You are absolutely not allowed to use `eval` or `exec`.
 - You can't use `break` and `continue` statements.
