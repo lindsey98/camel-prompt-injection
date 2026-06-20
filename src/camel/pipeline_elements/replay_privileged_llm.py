@@ -69,9 +69,14 @@ def _make_quarantined_llm_fn(messages: list[ad_types.ChatToolResultMessage]) -> 
         message = calls[i]
         i += 1
         output = yaml.safe_load(ad_types.get_text_content_as_str(message["content"]))
-        if issubclass(output_schema, pydantic.BaseModel):
+        if isinstance(output_schema, type) and issubclass(output_schema, pydantic.BaseModel):
             return output_schema(**output)
-        return output_schema(output)
+        # For non-BaseModel schemas (EmailStr, dict, dict[str, str], list[...], basic
+        # types, ...) the value can't be reconstructed by calling output_schema(output)
+        # directly (e.g. `EmailStr("...")` raises "EmailStr() takes no arguments"); use a
+        # TypeAdapter to validate/coerce it, matching how the live quarantined LLM builds
+        # the result.
+        return pydantic.TypeAdapter(output_schema).validate_python(output)
 
     return query_ai_assistant
 
