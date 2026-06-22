@@ -340,7 +340,7 @@ def _eval_constant(
             return EvalResult(
                 result.Error(
                     CaMeLException(
-                        NotImplementedError(f"unsupported constant type {type(node.value).__type__}"),
+                        NotImplementedError(f"unsupported constant type {type(node.value).__name__}"),
                         (node,),
                         (),
                     )
