@@ -24,6 +24,7 @@ from agentdojo.default_suites.v1.tools import banking_client, calendar_client, c
 
 from src.camel.capabilities import Capabilities, readers, sources
 from src.camel.conditional_cache import conditional_lru_cache
+from src.camel.interpreter import library
 from src.camel.interpreter import namespace as ns
 from src.camel.interpreter import value
 
@@ -288,6 +289,10 @@ def make_agentdojo_namespace(
     }
 
     return_types: dict[str, value.CaMeLValue] = {}
+    # Base classes for the synthesized tool-return classes. Normally these come from the
+    # namespace; fall back to the built-ins so a namespace missing them never crashes.
+    base_model_class = namespace.variables.get("BaseModel", library.BUILT_IN_CLASSES["BaseModel"])
+    enum_class = namespace.variables.get("Enum", library.BUILT_IN_CLASSES["Enum"])
 
     def _get_types_recursive(t: Any | None):
         if isinstance(t, type) and not isinstance(t, GenericAlias):
@@ -298,7 +303,7 @@ def make_agentdojo_namespace(
                     Capabilities.camel(),
                     (),
                     {},
-                    (namespace.variables["BaseModel"],),  # type: ignore -- this is hardcoded to be a class
+                    (base_model_class,),  # type: ignore -- this is hardcoded to be a class
                 )
                 for field in t.model_fields.values():
                     _get_types_recursive(field.annotation)
@@ -309,7 +314,7 @@ def make_agentdojo_namespace(
                     Capabilities.camel(),
                     (),
                     {},
-                    (namespace.variables["Enum"],),  # type: ignore -- this is hardcoded to be a class
+                    (enum_class,),  # type: ignore -- this is hardcoded to be a class
                 )
         for arg in typing.get_args(t):
             _get_types_recursive(arg)
