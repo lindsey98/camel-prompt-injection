@@ -53,6 +53,7 @@ _supported_model_names = {
     "gpt-4.1-nano-2025-04-14": "ChatGPT",
     "Llama-3.3-70B-Instruct": "Llama",
     "Qwen3-30B-A3B-Instruct-2507": "Qwen",
+    "Qwen3.6-35B-A3B": "Qwen",
 } | _oai_thinking_models_with_effort
 suffixes = ["", "+camel", "+camel+secpol", "+camel+secpol+strict"]
 
