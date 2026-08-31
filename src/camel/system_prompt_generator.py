@@ -27,7 +27,7 @@ import pydantic
 import pydantic.fields
 from agentdojo import functions_runtime
 
-from camel.interpreter import library, value
+from src.camel.interpreter import library, value
 
 _NEWLINE = "\n"
 
@@ -331,13 +331,17 @@ Keep in mind the following **extremely** important information for the code you 
 While you should write Python code, we are using a custom interpreter for your code for security reasons.
 While generating the code, follow these rules:
 
-- Do not use `while` loops and generators.
+- Do not use `while` loops or generator functions (with `yield`). Generator expressions such as
+  `all(x > 0 for x in xs)` or `sum(f(x) for x in xs)` are allowed (they are evaluated eagerly, like a list comprehension).
 - You are not allowed to import any modules. Stick to the types that are mentioned in these instructions.
 - You are absolutely not allowed to use `eval` or `exec`.
 - You can't use `break` and `continue` statements.
-- Defining new functions with `def` or `lambda` is not supported.
-- You are not allowed to use methods with side-effects (e.g., `dict.clear` or `list.append`).
-  Use instead functional alternatives such as comprehensions or the [*l, new_element] syntax.
+- Defining new named functions with `def` is not supported. `lambda` functions ARE supported,
+  e.g. as a `key=` argument: `sorted(events, key=lambda e: e.start_time)`.
+- In-place mutation of lists and dicts is supported (e.g., `list.append`, `list.extend`,
+  `list.insert`, `list.pop`, `list.remove`, `list.clear`, `dict.update`, `dict.pop`,
+  `dict.setdefault`, `dict.clear`). Functional alternatives such as comprehensions or the
+  `[*l, new_element]` syntax also work.
 """
 
 
@@ -346,25 +350,32 @@ def default_system_prompt_generator(
     classes_to_exclude: set[str] = set(),
 ) -> str:
     """Generates a system prompt with the provided functions."""
+    # 1. 角色定义
+    # 2. 可用的内置类型
+    # 3. 可用的内置函数
+    # 4. 可用的内置方法
+    # 5. 可用的非内置类
+    # 6. 工具函数
+    # 7. Pydantic 类型定义（如果有） → 工具返回值里用到的 BaseModel 定义
     function_definitions = (function_to_python_definition(f) for f in functions)
 
     pydantic_types_definitions = get_pydantic_types_definitions(functions).values()
 
     types_note = (
-        f"""
-### Available types
-
-The types used above which are not built-in are Pydantic BaseModels or Enums defined like this:
-
-```python
-{f"{_NEWLINE * 2}".join(pydantic_types_definitions)}
-```
-
-All these types are available to you for use, without need to re-define or import them.
-
-It is absolutely important that you do not assume that the type used for the fields are built in. For example, do not try to compare datetime objects with strings.
-
-"""
+        f"""    
+        ### Available types
+        
+        The types used above which are not built-in are Pydantic BaseModels or Enums defined like this:
+        
+        ```python
+        {f"{_NEWLINE * 2}".join(pydantic_types_definitions)}
+        ```
+        
+        All these types are available to you for use, without need to re-define or import them.
+        
+        It is absolutely important that you do not assume that the type used for the fields are built in. For example, do not try to compare datetime objects with strings.
+        
+        """
         if pydantic_types_definitions
         else ""
     )

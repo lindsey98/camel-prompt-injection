@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from camel.interpreter.library import camel_range
+from src.camel.interpreter.library import camel_range
 
 
 def test_range_only_start():

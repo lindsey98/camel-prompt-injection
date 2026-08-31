@@ -15,7 +15,7 @@
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar, runtime_checkable
 
 if TYPE_CHECKING:
-    from camel.interpreter.value import CaMeLValue
+    from src.camel.interpreter.value import CaMeLValue
 
 _RT = TypeVar("_RT", bound="CaMeLValue", covariant=True)
 

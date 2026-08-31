@@ -21,12 +21,12 @@ from agentdojo.agent_pipeline.llms.cohere_llm import (
 from agentdojo.functions_runtime import FunctionCall
 from agentdojo.types import text_content_block_from_string
 
-from camel.count_tokens import (
+from src.camel.count_tokens import (
     get_input_and_output_text_agentdojo,
     get_input_and_output_text_camel,
     get_input_and_output_text_tool_filter,
 )
-from camel.system_prompt_generator import default_system_prompt_generator
+from src.camel.system_prompt_generator import default_system_prompt_generator
 
 system_prompt = default_system_prompt_generator([])
 

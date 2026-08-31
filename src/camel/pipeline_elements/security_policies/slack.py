@@ -16,13 +16,13 @@ from collections.abc import Mapping
 
 from agentdojo.default_suites.v1.slack.task_suite import SlackEnvironment
 
-from camel.capabilities import can_readers_read_value, is_public, is_trusted
-from camel.interpreter.value import CaMeLValue
-from camel.pipeline_elements.security_policies.agentdojo_security_policies import (
+from src.camel.capabilities import can_readers_read_value, is_public, is_trusted
+from src.camel.interpreter.value import CaMeLValue
+from src.camel.pipeline_elements.security_policies.agentdojo_security_policies import (
     AgentDojoSecurityPolicyEngine,
     make_trusted_fields_policy,
 )
-from camel.security_policy import NO_SIDE_EFFECT_TOOLS, Allowed, Denied, SecurityPolicyResult
+from src.camel.security_policy import NO_SIDE_EFFECT_TOOLS, Allowed, Denied, SecurityPolicyResult
 
 workspace_no_side_effect_tools = {
     "get_channels",

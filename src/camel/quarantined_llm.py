@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import time
 from typing import TypeVar
 
@@ -20,10 +21,11 @@ from pydantic import BaseModel, Field, create_model
 from pydantic_ai import models
 
 _T = TypeVar("_T")
-
+# 是 Python 类型系统里的泛型变量，表示"某个具体类型，但现在还不确定是哪个"
+# def query_quarantined_llm(output_schema: type[_T]) -> _T: 表示 输入和输出是同一个类型
 
 class NotEnoughInformationError(Exception): ...
-
+# ... Python 的 Ellipsis，在类/函数体里等价于 pass，表示"这里没有任何实现"
 
 _SYSTEM_PROMPT = """\
 You are a helpful assistant that assists a user to parse unstructured data into structured data. \
@@ -67,6 +69,7 @@ def query_quarantined_llm(
       - `enum.Enum` classes
       - `pydantic.BaseModel` classes that you can define (assume that `BaseModel` is imported from `pydantic`) or are already defined in these instructions.
       - `pydantic.EmailStr` (assume that `EmailStr` is imported from `pydantic`)
+      - `list`, `tuple`, and `dict` of the above types (prefer parametrized types such as `dict[str, str]` or `list[int]` so the parsing is accurate).
     """
 
     enough_information = (
@@ -76,28 +79,70 @@ def query_quarantined_llm(
         ),
     )
 
-    if issubclass(output_schema, BaseModel):
-        output_model = create_model(
-            output_schema.__name__,
-            __base__=output_schema,
-            have_enough_information=enough_information,
-        )
-    else:
-        output_model = create_model(
-            "Result",
-            output=(output_schema, Field(description="The requested value")),
-            have_enough_information=enough_information,
-        )
-    model = pydantic_ai.Agent(llm, result_type=output_model, retries=retries, system_prompt=_SYSTEM_PROMPT)
+    # output_model 是动态创建的 Pydantic 模型，分两种情况
+    # BaseModel 是Pydantic 的基类，作用是声明数据结构并自动做类型校验，普通 dataclass声明类型但不校验
+    # isinstance(.., type) 守卫:像 dict[str, str] 这样的泛型别名不是 type,走 else 分支交给 pydantic
+    schema_is_base_model = isinstance(output_schema, type) and issubclass(output_schema, BaseModel)
+    try:
+        if schema_is_base_model:  # create_model 在它基础上加一个字段
+            output_model = create_model(
+                output_schema.__name__,
+                __base__=output_schema,
+                have_enough_information=enough_information,
+            )
+        else:  # output_schema 是基本类型（str, int...）
+            output_model = create_model(
+                "Result",
+                output=(output_schema, Field(description="The requested value")),
+                have_enough_information=enough_information,
+            )
+        model = pydantic_ai.Agent(llm, output_type=output_model, retries=retries, system_prompt=_SYSTEM_PROMPT)
+    except RecursionError as e:
+        # A self-referential / very deeply nested output_schema makes pydantic recurse
+        # forever while building the JSON schema. Turn it into a recoverable error so the
+        # run doesn't crash (the interpreter re-raises bare RecursionErrors) and the model
+        # can retry with a simpler schema.
+        raise ValueError(
+            "The output_schema is too deeply nested or self-referential to build a schema for. "
+            "Use a simpler, non-recursive output_schema."
+        ) from e
 
-    res = model.run_sync(query).data
+    debug = bool(os.getenv("CAMEL_DEBUG_QLLM"))
+    if debug:
+        print("=" * 80)
+        print(f"[Q-LLM] schema: {getattr(output_schema, '__name__', output_schema)}")
+        print(f"[Q-LLM] query:\n{query}")
+    try:
+        run_result = model.run_sync(query)
+        # pydantic-ai renamed `AgentRunResult.data` to `.output` in newer versions.
+        res = run_result.output if hasattr(run_result, "output") else run_result.data
+    except RecursionError as e:
+        if debug:
+            print(f"[Q-LLM] FAILED: RecursionError: {e}")
+            print("=" * 80)
+        raise ValueError(
+            "The output_schema is too deeply nested or self-referential to build a schema for. "
+            "Use a simpler, non-recursive output_schema."
+        ) from e
+    except Exception as e:
+        if debug:
+            print(f"[Q-LLM] FAILED: {type(e).__name__}: {e}")
+            print("=" * 80)
+        raise
+
+    if debug:
+        print(f"[Q-LLM] output: {res!r}")
+        print("=" * 80)
 
     if isinstance(llm, str) and "gemini" in llm and "exp" in llm:
         time.sleep(6)
 
+    # q-LLM 返回两个东西：结果 + 能不能做。如果不能做，直接抛异常。
     if not res.have_enough_information:  # type: ignore
+        if debug:
+            print("[Q-LLM] have_enough_information=False -> NotEnoughInformationError")
         raise NotEnoughInformationError()
 
-    if issubclass(output_schema, BaseModel):
+    if schema_is_base_model:
         return res  # type: ignore
     return res.output  # type: ignore

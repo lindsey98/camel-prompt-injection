@@ -1,7 +1,7 @@
 from typing import Protocol
 
-from camel.capabilities import Capabilities, readers, sources
-from camel.interpreter.value import CaMeLValue
+from src.camel.capabilities import Capabilities, readers, sources
+from src.camel.interpreter.value import CaMeLValue
 
 
 class HasDependenciesAndMetadata(Protocol):

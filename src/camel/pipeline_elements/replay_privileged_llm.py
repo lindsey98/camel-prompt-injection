@@ -16,34 +16,34 @@ import dataclasses
 import inspect
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TypeAlias, TypeVar
+from typing import Any, TypeAlias, TypeVar
 
 import pydantic
 import yaml
 from agentdojo import attacks, functions_runtime
 from agentdojo import types as ad_types
 from agentdojo.agent_pipeline import AgentPipeline, BasePipelineElement
-from agentdojo.agent_pipeline.tool_execution import tool_result_to_str
 from agentdojo.base_tasks import BaseInjectionTask, BaseUserTask
 from agentdojo.default_suites.v1.travel.task_suite import TravelEnvironment
 from agentdojo.default_suites.v1.workspace.user_tasks import WorkspaceEnvironment
 from agentdojo.functions_runtime import EmptyEnv, FunctionCall, FunctionsRuntime
 from agentdojo.task_suite.load_suites import get_suite
 
-from camel import quarantined_llm
-from camel.chat_turn import make_turns
-from camel.interpreter import interpreter, result
-from camel.interpreter.namespace import Namespace
-from camel.pipeline_elements.agentdojo_function import make_agentdojo_namespace
-from camel.pipeline_elements.privileged_llm import (
+from src.camel import quarantined_llm
+from src.camel.chat_turn import make_turns
+from src.camel.interpreter import interpreter, result
+from src.camel.interpreter.namespace import Namespace
+from src.camel.pipeline_elements.agentdojo_function import make_agentdojo_namespace
+from src.camel.pipeline_elements.privileged_llm import (
     _highlight_exception_code,
     extract_print_output,
     make_ad_tool_calls,
+    tool_result_to_str,
 )
-from camel.pipeline_elements.security_policies.agentdojo_security_policies import (
+from src.camel.pipeline_elements.security_policies.agentdojo_security_policies import (
     AgentDojoSecurityPolicyEngine,
 )
-from camel.security_policy import NoSecurityPolicyEngine, SecurityPolicyDeniedError
+from src.camel.security_policy import NoSecurityPolicyEngine, SecurityPolicyDeniedError
 
 FunctionCall.model_rebuild()
 
@@ -62,7 +62,7 @@ def _make_quarantined_llm_fn(messages: list[ad_types.ChatToolResultMessage]) -> 
     calls = [message for message in messages if message["tool_call"].function == "query_ai_assistant"]
     i = 0
 
-    def query_ai_assistant(query: str, output_schema: type[_T]) -> _T:
+    def query_ai_assistant(query: str, output_schema: Any) -> _T:
         nonlocal i
         if i >= len(calls):
             raise quarantined_llm.NotEnoughInformationError()
@@ -232,7 +232,8 @@ def replay_task(
             error_messages = make_error_messages(turn.code, res.error)
             messages = [*messages, *tool_call_messages, *error_messages]
 
-    if messages[-1]["role"] == "user" and "\n\nTraceback" in ad_types.get_text_content_as_str(messages[-1]["content"]):
+    # AgentDojo requires the conversation to end with an assistant message.
+    if messages and messages[-1]["role"] != "assistant":
         messages.append(ad_types.ChatAssistantMessage(role="assistant", content=None, tool_calls=None))
 
     return messages, env

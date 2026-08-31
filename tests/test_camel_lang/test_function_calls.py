@@ -17,16 +17,16 @@ import dataclasses
 from datetime import datetime
 from typing import ClassVar
 
-from camel import security_policy
-from camel.capabilities import Capabilities
-from camel.capabilities.readers import Public
-from camel.capabilities.sources import Tool
-from camel.interpreter import (
+from src.camel import security_policy
+from src.camel.capabilities import Capabilities
+from src.camel.capabilities.readers import Public
+from src.camel.capabilities.sources import Tool
+from src.camel.interpreter import (
     interpreter,
     result,
     value,
 )
-from camel.interpreter import namespace as ns
+from src.camel.interpreter import namespace as ns
 
 
 def pytest_generate_tests(metafunc):

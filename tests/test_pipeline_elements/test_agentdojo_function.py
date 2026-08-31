@@ -19,16 +19,16 @@ from typing import ClassVar
 from agentdojo import functions_runtime
 from pydantic import BaseModel
 
-from camel import security_policy
-from camel.capabilities import Capabilities, sources
-from camel.capabilities.readers import Public
-from camel.interpreter import (
+from src.camel import security_policy
+from src.camel.capabilities import Capabilities, sources
+from src.camel.capabilities.readers import Public
+from src.camel.interpreter import (
     interpreter,
     result,
     value,
 )
-from camel.interpreter import namespace as ns
-from camel.pipeline_elements import agentdojo_function
+from src.camel.interpreter import namespace as ns
+from src.camel.pipeline_elements import agentdojo_function
 
 
 def pytest_generate_tests(metafunc):

@@ -19,8 +19,8 @@ import fnmatch
 from collections.abc import Iterable, Mapping
 from typing import Protocol
 
-from camel.capabilities import get_all_readers, is_public, readers
-from camel.interpreter.value import CaMeLValue
+from src.camel.capabilities import get_all_readers, is_public, readers
+from src.camel.interpreter.value import CaMeLValue
 
 
 @dataclasses.dataclass(frozen=True)

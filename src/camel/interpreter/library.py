@@ -19,15 +19,15 @@ From https://github.com/google/starlark-go/blob/master/starlark/library.go#L157
 
 import datetime
 import enum
-from collections.abc import Iterable, Reversible
+from collections.abc import Callable, Iterable, Reversible
 from typing import Any, TypeVar
 
 import pydantic
 import pydantic.fields
 
-from camel.capabilities import Capabilities
-from camel.interpreter import value
-from camel.quarantined_llm import NotEnoughInformationError
+from src.camel.capabilities import Capabilities
+from src.camel.interpreter import value
+from src.camel.quarantined_llm import NotEnoughInformationError
 
 
 # This can't be typed in a more narrow way bc of limitations of the Python type system.
@@ -46,6 +46,16 @@ def camel_enumerate(x: Iterable[_T], start: int = 0) -> list[tuple[int, _T]]:
 
 def camel_reversed(x: Reversible[_T]) -> list[_T]:
     return list(reversed(x))
+
+
+# `map`/`filter` are evaluated eagerly (the interpreter does not use lazy objects). The
+# function argument is a CaMeL callable's raw (e.g. a lambda), which operates on raw values.
+def camel_map(func: Callable[..., Any], *iterables: Iterable[Any]) -> list[Any]:
+    return list(map(func, *iterables))
+
+
+def camel_filter(func: Callable[..., Any] | None, iterable: Iterable[Any]) -> list[Any]:
+    return list(filter(func, iterable))
 
 
 def camel_bool(x: object) -> bool:
@@ -83,11 +93,14 @@ BUILT_IN_FUNCTIONS: dict[str, value.CaMeLBuiltin] = {
     "any": value.make_camel_builtin("any", any),
     "all": value.make_camel_builtin("all", all),
     "bool": value.make_camel_builtin("bool", camel_bool),
+    "dict": value.make_camel_builtin("dict", dict),
     "dir": value.make_camel_builtin("dir", camel_dir),
     "divmod": value.make_camel_builtin("divmod", divmod),
     # We don't want lazy objects, so `enumerate` must return a list
     "enumerate": value.make_camel_builtin("enumerate", camel_enumerate),
+    "filter": value.make_camel_builtin("filter", camel_filter),
     "float": value.make_camel_builtin("float", float),
+    "map": value.make_camel_builtin("map", camel_map),
     "hash": value.make_camel_builtin("hash", hash),
     "int": value.make_camel_builtin("int", int),
     "len": value.make_camel_builtin("len", len),
@@ -115,24 +128,23 @@ See https://github.com/bazelbuild/starlark/blob/master/spec.md#built-in-constant
 
 SUPPORTED_BUILT_IN_METHODS: dict[str, dict[str, value.CaMeLBuiltin]] = {
     "dict": {
-        # "clear": value.make_builtin("clear", dict.clear),
+        "clear": value.make_camel_mutating_method("clear", value.CaMeLMutableMapping.clear),
         "get": value.make_camel_builtin("get", dict.get),
         "items": value.make_camel_builtin("items", lambda d: list(d.items())),
         "keys": value.make_camel_builtin("keys", lambda d: list(d.keys())),
-        # "pop": value.make_builtin("pop", dict.pop),
-        # "popitem": value.make_builtin("popitem", dict.popitem),
-        # "setdefault": value.make_builtin("setdefault", dict.setdefault),
-        # "update": value.make_builtin("update", dict.update),
+        "pop": value.make_camel_mutating_method("pop", value.CaMeLMutableMapping.pop),
+        "setdefault": value.make_camel_mutating_method("setdefault", value.CaMeLMutableMapping.setdefault),
+        "update": value.make_camel_mutating_method("update", value.CaMeLMutableMapping.update),
         "values": value.make_camel_builtin("values", lambda d: list(d.values())),
     },
     "list": {
-        # "append": value.make_builtin("append", list.append),
-        # "clear": value.make_builtin("clear", list.clear),
-        # "extend": value.make_builtin("extend", list.extend),
+        "append": value.make_camel_mutating_method("append", value.CaMeLMutableSequence.append),
+        "clear": value.make_camel_mutating_method("clear", value.CaMeLMutableSequence.clear),
+        "extend": value.make_camel_mutating_method("extend", value.CaMeLMutableSequence.extend),
         "index": value.make_camel_builtin("index", list.index),
-        # "insert": value.make_builtin("insert", list.insert),
-        # "pop": value.make_builtin("pop", list.pop),
-        # "remove": value.make_builtin("remove", list.remove),
+        "insert": value.make_camel_mutating_method("insert", value.CaMeLMutableSequence.insert),
+        "pop": value.make_camel_mutating_method("pop", value.CaMeLMutableSequence.pop),
+        "remove": value.make_camel_mutating_method("remove", value.CaMeLMutableSequence.remove),
     },
     "str": {
         "capitalize": value.make_camel_builtin("capitalize", str.capitalize),

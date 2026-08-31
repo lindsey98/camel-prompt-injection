@@ -1,20 +1,22 @@
 import os
 import time
+import warnings
 
 import anthropic
 import openai
 from agentdojo import agent_pipeline, functions_runtime
+from agentdojo import types as ad_types
 from agentdojo.agent_pipeline.agent_pipeline import load_system_message
 from agentdojo.models import MODEL_NAMES
 from google import genai
 from openai.types.chat import ChatCompletionReasoningEffort
 from pydantic_ai.models import KnownModelName
 
-from camel.interpreter.interpreter import MetadataEvalMode
-from camel.pipeline_elements.anthropic_tool_filter import AnthropicLLMToolFilter
-from camel.pipeline_elements.privileged_llm import PrivilegedLLM
-from camel.pipeline_elements.replay_privileged_llm import PrivilegedLLMReplayer, UserInjectionTasksGetter
-from camel.pipeline_elements.security_policies import (
+from src.camel.interpreter.interpreter import MetadataEvalMode
+from src.camel.pipeline_elements.anthropic_tool_filter import AnthropicLLMToolFilter
+from src.camel.pipeline_elements.privileged_llm import PrivilegedLLM
+from src.camel.pipeline_elements.replay_privileged_llm import PrivilegedLLMReplayer, UserInjectionTasksGetter
+from src.camel.pipeline_elements.security_policies import (
     ADNoSecurityPolicyEngine,
     AgentDojoSecurityPolicyEngine,
     BankingSecurityPolicyEngine,
@@ -36,17 +38,22 @@ _oai_thinking_models_with_effort = {
 }
 _supported_model_names = {
     "gemini-2.5-flash-preview-05-20": "AI model developed by Google",
-    "gemini-2.5-pro-preview-06-05": "AI model developed by Google",
-    "gemini-2.0-flash-lite-001": "AI model developed by Google",
-    "claude-3-5-haiku-20241022": "Claude",
+    "gemini-2.5-flash": "AI model developed by Google",
+     "gemini-2.5-flash-lite": "AI model developed by Google",
+     "gemini-2.5-pro-preview-06-05": "AI model developed by Google",
+     "claude-3-5-haiku-20241022": "Claude",
     "claude-3-5-sonnet-20241022": "Claude",
     "claude-3-7-sonnet-20250219": "Claude",
     "claude-sonnet-4-20250514": "Claude",
     "claude-opus-4-20250514": "Claude",
+    "claude-sonnet-4-5-20250929": "Claude",
     "gpt-4o-2024-08-06": "GPT-4",
     "gpt-4o-mini-2024-07-18": "GPT-4",
     "gpt-4.1-2025-04-14": "ChatGPT",
     "gpt-4.1-nano-2025-04-14": "ChatGPT",
+    "Llama-3.3-70B-Instruct": "Llama",
+    "Qwen3-30B-A3B-Instruct-2507": "Qwen",
+    "Qwen3.6-35B-A3B": "Qwen",
 } | _oai_thinking_models_with_effort
 suffixes = ["", "+camel", "+camel+secpol", "+camel+secpol+strict"]
 
@@ -85,6 +92,149 @@ class Sleep(agent_pipeline.BasePipelineElement):
         return query, runtime, env, messages, extra_args
 
 
+_CONTEXT_ERROR_MARKERS = (
+    "context length",
+    "context_length",
+    "maximum context",
+    "reduce the length",
+    "too many tokens",
+)
+
+
+def _is_context_length_error(exc: Exception) -> bool:
+    """Best-effort detection of a 'prompt longer than the context window' error."""
+    message = str(exc).lower()
+    return any(marker in message for marker in _CONTEXT_ERROR_MARKERS)
+
+
+def _force_single_tool_calls(client: openai.OpenAI) -> None:
+    """Force ``parallel_tool_calls=False`` on a client's chat completions.
+
+    Some local servers (e.g. vLLM with the ``llama3_json`` tool-call parser) only
+    support a single tool call per turn and return a 400 otherwise. This only affects
+    requests that actually pass ``tools`` (i.e. the native ``--use-original`` baseline);
+    CaMeL's privileged LLM sends no tools, so it is unaffected.
+    """
+    original_create = client.chat.completions.create
+
+    def create(*args, **kwargs):
+        if kwargs.get("tools"):
+            kwargs.setdefault("parallel_tool_calls", False)
+        return original_create(*args, **kwargs)
+
+    try:
+        client.chat.completions.create = create  # type: ignore[method-assign]
+    except (AttributeError, TypeError) as e:  # pragma: no cover - SDK internals may change
+        warnings.warn(
+            "Could not force parallel_tool_calls=False on the local client "
+            f"({e}); native (--use-original) tool calling may fail on single-tool-call "
+            "parsers like vLLM's llama3_json."
+        )
+
+
+def _make_context_safe(llm: agent_pipeline.BasePipelineElement) -> agent_pipeline.BasePipelineElement:
+    """Wraps an LLM element so a context-length overflow fails the task instead of crashing.
+
+    When the prompt exceeds the model's context window (common with local models that
+    have a small window), the underlying client raises a 400 BadRequestError that would
+    otherwise abort the whole benchmark. Here we catch it, emit a warning, and return an
+    empty assistant turn so the pipeline ends gracefully and the task is scored as failed.
+    """
+    original_query = llm.query
+
+    def safe_query(
+        query,
+        runtime,
+        env=functions_runtime.EmptyEnv(),
+        messages=[],
+        extra_args={},
+    ):
+        try:
+            return original_query(query, runtime, env, messages, extra_args)
+        except openai.BadRequestError as e:
+            if not _is_context_length_error(e):
+                raise
+            warnings.warn(f"Skipping turn: prompt exceeded the model's context window ({e}).")
+            empty_message = ad_types.ChatAssistantMessage(role="assistant", content=None, tool_calls=None)
+            return query, runtime, env, [*messages, empty_message], extra_args
+
+    llm.query = safe_query  # type: ignore[method-assign]
+    return llm
+
+
+def _disable_google_safety(client) -> None:
+    """Inject ``safety_settings=OFF`` into a google-genai client's generate_content.
+
+    Gemini's safety filters can return a candidate with no content parts (logged by
+    AgentDojo as "no content parts"), which silently fails the turn. AgentDojo's
+    GoogleLLM does not expose safety settings, so we wrap the client to set them when
+    the caller hasn't. Set CAMEL_KEEP_GOOGLE_SAFETY=1 to keep the default filters.
+    """
+    if os.getenv("CAMEL_KEEP_GOOGLE_SAFETY"):
+        return
+    try:
+        from google.genai import types
+
+        categories = (
+            "HARM_CATEGORY_HARASSMENT",
+            "HARM_CATEGORY_HATE_SPEECH",
+            "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            "HARM_CATEGORY_DANGEROUS_CONTENT",
+        )
+        off_settings = None
+        for threshold in ("OFF", "BLOCK_NONE"):
+            try:
+                off_settings = [types.SafetySetting(category=c, threshold=threshold) for c in categories]
+                break
+            except Exception:
+                continue
+        if off_settings is None:
+            warnings.warn("Could not build Google safety settings (no accepted threshold); leaving defaults.")
+            return
+    except Exception as e:  # pragma: no cover - depends on google-genai internals
+        warnings.warn(f"Could not build Google safety settings ({e}); leaving defaults.")
+        return
+
+    original_generate = client.models.generate_content
+
+    def _log_if_empty(response) -> None:
+        try:
+            candidate = response.candidates[0]
+            content = getattr(candidate, "content", None)
+            if content is None or not getattr(content, "parts", None):
+                warnings.warn(
+                    f"[Gemini] empty content: finish_reason={getattr(candidate, 'finish_reason', None)} "
+                    f"safety_ratings={getattr(candidate, 'safety_ratings', None)}"
+                )
+        except Exception:
+            pass
+
+    def generate_content(*args, **kwargs):
+        config = kwargs.get("config")
+        if config is not None and getattr(config, "safety_settings", None) is None:
+            try:
+                config.safety_settings = off_settings
+            except Exception:
+                pass
+        # Optional: cap/disable thinking for Gemini 2.5 models that otherwise return
+        # an empty answer (finish_reason=STOP with no content parts). Set
+        # CAMEL_GOOGLE_THINKING_BUDGET (e.g. 0 for flash, 128 for pro) to enable.
+        budget = os.getenv("CAMEL_GOOGLE_THINKING_BUDGET")
+        if budget is not None and config is not None and getattr(config, "thinking_config", None) is None:
+            try:
+                config.thinking_config = types.ThinkingConfig(thinking_budget=int(budget))
+            except Exception:
+                pass
+        response = original_generate(*args, **kwargs)
+        _log_if_empty(response)
+        return response
+
+    try:
+        client.models.generate_content = generate_content  # type: ignore[method-assign]
+    except (AttributeError, TypeError) as e:  # pragma: no cover
+        warnings.warn(f"Could not disable Google safety filters ({e}).")
+
+
 def make_tools_pipeline(
     model: KnownModelName,
     use_original: bool,
@@ -102,6 +252,7 @@ def make_tools_pipeline(
         # llm = GoogleLLM(model.split(":")[1])
         # client = genai.Client(vertexai=True, project=os.getenv("GCP_PROJECT"), location=os.getenv("GCP_LOCATION"))
         client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+        _disable_google_safety(client)
         if model == "google:gemini-2.0-flash-lite-001":
             max_tokens = 8192
         else:
@@ -123,10 +274,40 @@ def make_tools_pipeline(
         llm = agent_pipeline.AnthropicLLM(
             client, model.split(":")[1], thinking_budget_tokens=thinking_budget_tokens, max_tokens=max_tokens
         )
+    elif model.startswith("local:"):
+        # Local / self-hosted model exposed via an OpenAI-compatible server
+        # (vLLM, Ollama, TGI, SGLang, ...). Configure the endpoint with the
+        # LOCAL_BASE_URL and (optional) LOCAL_API_KEY environment variables.
+        base_url = os.getenv("LOCAL_BASE_URL", "http://localhost:8000/v1")
+        client = openai.OpenAI(api_key=os.getenv("LOCAL_API_KEY", "EMPTY"), base_url=base_url)
+        # Many local tool-call parsers (e.g. vLLM's llama3_json) only support a single
+        # tool call per turn, which the native (--use-original) loop would otherwise
+        # violate. Force parallel_tool_calls=False for this client.
+        _force_single_tool_calls(client)
+        llm = agent_pipeline.OpenAILLM(client, model.split(":", 1)[1], None)
     else:
         raise ValueError("Invalid model")
 
-    llm.name = model.split(":")[1]
+    llm.name = model.split(":", 1)[1]
+    # Make context-window overflows fail the task gracefully instead of crashing the run.
+    llm = _make_context_safe(llm)
+
+    # The quarantined LLM is invoked through pydantic-ai. For local models we
+    # build an explicit OpenAI-compatible model object pointing at the same
+    # endpoint; for the hosted providers we keep passing the model string.
+    if model.startswith("local:"):
+        from pydantic_ai.models.openai import OpenAIModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        quarantined_llm_model = OpenAIModel(
+            model.split(":", 1)[1],
+            provider=OpenAIProvider(
+                base_url=os.getenv("LOCAL_BASE_URL", "http://localhost:8000/v1"),
+                api_key=os.getenv("LOCAL_API_KEY", "EMPTY"),
+            ),
+        )
+    else:
+        quarantined_llm_model = model
 
     engine = _SECURITY_POLICY_ENGINES[suite]
 
@@ -197,7 +378,7 @@ def make_tools_pipeline(
                 PrivilegedLLM(
                     llm,
                     ADNoSecurityPolicyEngine,
-                    q_llm or model,
+                    q_llm or quarantined_llm_model,
                 ),
             ]
         )

@@ -19,9 +19,9 @@ from agentdojo import attacks, benchmark, logging
 from agentdojo.task_suite import get_suite
 from openai.types.chat import ChatCompletionReasoningEffort
 
-import camel.custom_yaml  # noqa
-from camel.interpreter.interpreter import MetadataEvalMode
-from camel.models import make_tools_pipeline
+import src.camel.custom_yaml  # noqa
+from src.camel.interpreter.interpreter import MetadataEvalMode
+from src.camel.models import make_tools_pipeline
 
 
 def main(
@@ -32,6 +32,7 @@ def main(
     ad_defense: str | None = None,
     run_attack: bool = False,
     replay_with_policies: bool = False,
+    force_rerun: bool = False,
     suites: list[str] | None = None,
     eval_mode: MetadataEvalMode = MetadataEvalMode.NORMAL,
     q_llm: str | None = None,
@@ -50,6 +51,7 @@ def main(
         ad_defense: whether to use a defense from AgentDojo and which one. It must be used in conjunction with `--use-original`.
             Tested defenses are "tool_filter", "repeat_user_prompt", "spotlight_with_delimiting"
         run_attack: whether to run the attack (it uses AgentDojo's `important_instructions` attack)
+        force_rerun: re-run tasks even if a cached result/trace already exists (otherwise finished tasks are skipped).
         replay_with_policies: replay the run with the given model enforcing security policies. Note that the equivalent run (with same model and attack config)
             should have already been run.
         suites: which suites to run AgentDojo on (can be a list from `["workspace", "banking", "travel", "slack"]`)
@@ -85,7 +87,7 @@ def main(
                     suite,
                     attack,
                     logdir,
-                    force_rerun=False,
+                    force_rerun=force_rerun,
                     user_tasks=user_tasks,
                 )
             else:
@@ -93,7 +95,7 @@ def main(
                     tools_pipeline,
                     suite,
                     logdir,
-                    force_rerun=False,
+                    force_rerun=force_rerun,
                     user_tasks=user_tasks,
                 )
 

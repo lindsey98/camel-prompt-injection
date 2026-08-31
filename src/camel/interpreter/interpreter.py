@@ -29,17 +29,17 @@ import pydantic
 import pydantic_ai
 from pydantic.fields import Field, FieldInfo
 
-from camel import security_policy
-from camel.capabilities import Capabilities
-from camel.capabilities.readers import Public
-from camel.capabilities.sources import Tool
-from camel.interpreter import namespace as ns
-from camel.interpreter import (
+from src.camel import security_policy
+from src.camel.capabilities import Capabilities
+from src.camel.capabilities.readers import Public
+from src.camel.capabilities.sources import Tool
+from src.camel.interpreter import namespace as ns
+from src.camel.interpreter import (
     op_protocols,
     result,
     value,
 )
-from camel.quarantined_llm import NotEnoughInformationError
+from src.camel.quarantined_llm import NotEnoughInformationError
 
 ExceptionASTNodes: TypeAlias = ast.expr | ast.stmt | ast.excepthandler
 
@@ -63,12 +63,12 @@ class CaMeLException(Generic[_E]):
 
     def __repr__(self) -> str:
         return f"""\
-CaMeLException(
-  exception={type(self.exception).__name__}({self.exception}),
-  nodes={[ast.dump(node) for node in self.nodes]},
-  dependencies={self.get_dependencies()}
-  metadata={self.metadata}
-)"""
+            CaMeLException(
+              exception={type(self.exception).__name__}({self.exception}),
+              nodes={[ast.dump(node) for node in self.nodes]},
+              dependencies={self.get_dependencies()}
+              metadata={self.metadata}
+        )"""
 
 
 _V = TypeVar("_V", bound=value.CaMeLValue)
@@ -340,7 +340,7 @@ def _eval_constant(
             return EvalResult(
                 result.Error(
                     CaMeLException(
-                        NotImplementedError(f"unsupported constant type {type(node.value).__type__}"),
+                        NotImplementedError(f"unsupported constant type {type(node.value).__name__}"),
                         (node,),
                         (),
                     )
@@ -487,6 +487,21 @@ def _eval_subscript_load(
                 return EvalResult(
                     result.Error(CaMeLException(e, (node,), (slice, obj))), namespace, tool_calls_chain, dependencies
                 )
+        case value.CaMeLClass() | value.CaMeLBuiltin() if isinstance(obj.raw, type):
+            # Type parameterization such as `dict[str, str]` or `list[int]` (used e.g.
+            # to specify the `output_schema` of `query_ai_assistant`).
+            try:
+                parametrized = obj.raw[slice.raw]
+            except TypeError:
+                return EvalResult(type_error, namespace, tool_calls_chain, dependencies)
+            wrapped = value.CaMeLClass(
+                getattr(parametrized, "__name__", str(parametrized)),
+                parametrized,
+                Capabilities.camel(),
+                (obj, slice),
+                {},
+            )
+            return EvalResult(result.Ok(wrapped), namespace, tool_calls_chain, dependencies)
         case _:
             return EvalResult(type_error, namespace, tool_calls_chain, dependencies)
 
@@ -1136,7 +1151,7 @@ def _eval_comprehensions(
 
 
 def _eval_list_comp(
-    node: ast.ListComp,
+    node: ast.ListComp | ast.GeneratorExp,
     namespace: ns.Namespace,
     tool_calls_chain: Sequence[FunctionCall],
     dependencies: Iterable[value.CaMeLValue],
@@ -1750,6 +1765,45 @@ def _eval_if_exp(
     )
 
 
+class _LoopControlSignal(Exception):
+    """Internal signal used to implement `break`/`continue`.
+
+    Carries the interpreter state (namespace / tool-call chain / dependencies) at the
+    point of the statement so the loop can resume with it, since state is threaded by
+    return values rather than mutation.
+    """
+
+    def __init__(
+        self,
+        namespace: ns.Namespace,
+        tool_calls_chain: Sequence[FunctionCall],
+        dependencies: Iterable[value.CaMeLValue],
+    ) -> None:
+        self.namespace = namespace
+        self.tool_calls_chain = tool_calls_chain
+        self.dependencies = dependencies
+
+
+class _BreakSignal(_LoopControlSignal): ...
+
+
+class _ContinueSignal(_LoopControlSignal): ...
+
+
+class _ReturnSignal(_LoopControlSignal):
+    """Signal used to implement `return` from a `def` function. Carries the returned value."""
+
+    def __init__(
+        self,
+        value: "value.CaMeLValue",
+        namespace: ns.Namespace,
+        tool_calls_chain: Sequence[FunctionCall],
+        dependencies: Iterable[value.CaMeLValue],
+    ) -> None:
+        super().__init__(namespace, tool_calls_chain, dependencies)
+        self.value = value
+
+
 def _eval_for(
     node: ast.For,
     namespace: ns.Namespace,
@@ -1757,20 +1811,6 @@ def _eval_for(
     dependencies: Iterable[value.CaMeLValue],
     eval_args: EvalArgs,
 ) -> EvalResult:
-    if node.orelse:
-        return EvalResult(
-            result.Error(
-                CaMeLException(
-                    SyntaxError("orelse blocks in for loops are not supported because break is not supported."),
-                    (node,),
-                    (),
-                )
-            ),
-            namespace,
-            tool_calls_chain,
-            dependencies,
-        )
-
     iterable_res, namespace, tool_calls_chain, dependencies = camel_eval(
         node.iter, namespace, tool_calls_chain, dependencies, eval_args
     )
@@ -1795,6 +1835,7 @@ def _eval_for(
         )
 
     dependencies = [*dependencies, iterable]
+    broke = False
     for elt in iterable.iterate_python():
         assign_res, namespace, tool_calls_chain, dependencies = _assign(
             elt,
@@ -1807,22 +1848,39 @@ def _eval_for(
         if isinstance(assign_res, result.Error):
             return EvalResult(assign_res, namespace, tool_calls_chain, dependencies)
 
-        final_val_res, namespace, tool_calls_chain, dependencies = _eval_stmt_list(
-            node.body,
-            namespace,
-            tool_calls_chain,
-            # no need to add `elt` to the dependency, as whether the statement gets
-            # evaluated depends on the iterable overall, and not on `elt` directly.
-            # Of course if `elt` is used in the statement, this will be considered by
-            # the evaluation of the statement.
-            dependencies,
-            eval_args,
-        )
+        try:
+            final_val_res, namespace, tool_calls_chain, dependencies = _eval_stmt_list(
+                node.body,
+                namespace,
+                tool_calls_chain,
+                # no need to add `elt` to the dependency, as whether the statement gets
+                # evaluated depends on the iterable overall, and not on `elt` directly.
+                # Of course if `elt` is used in the statement, this will be considered by
+                # the evaluation of the statement.
+                dependencies,
+                eval_args,
+            )
+        except _ContinueSignal as signal:
+            namespace, tool_calls_chain, dependencies = signal.namespace, signal.tool_calls_chain, signal.dependencies
+            continue
+        except _BreakSignal as signal:
+            namespace, tool_calls_chain, dependencies = signal.namespace, signal.tool_calls_chain, signal.dependencies
+            broke = True
+            break
         if isinstance(final_val_res, result.Error):
             return EvalResult(final_val_res, namespace, tool_calls_chain, dependencies)
 
     dependencies = list(dependencies)
-    dependencies.remove(iterable)
+    if iterable in dependencies:
+        dependencies.remove(iterable)
+
+    # `for ... else`: the else block runs only if the loop completed without `break`.
+    if node.orelse and not broke:
+        orelse_res, namespace, tool_calls_chain, dependencies = _eval_stmt_list(
+            node.orelse, namespace, tool_calls_chain, dependencies, eval_args
+        )
+        if isinstance(orelse_res, result.Error):
+            return EvalResult(orelse_res, namespace, tool_calls_chain, dependencies)
 
     return EvalResult(result.Ok(value.CaMeLNone(Capabilities.default(), ())), namespace, tool_calls_chain, dependencies)
 
@@ -2238,12 +2296,17 @@ def _eval_class_def(
     eval_args: EvalArgs,
 ) -> EvalResult:
     """Evaluates a class definition."""
-    if node.name in namespace.variables:
+    # Re-defining a user class is allowed (it simply overwrites the previous one): the
+    # retry loop keeps the namespace across attempts and re-runs the whole resubmitted
+    # code, so forbidding it would make every retry that re-declares a class fail. We
+    # still forbid shadowing built-ins (e.g. `dict`, `datetime`, `BaseModel`).
+    existing = namespace.variables.get(node.name)
+    if existing is not None and getattr(existing, "is_builtin", False):
         return EvalResult(
             result.Error(
                 CaMeLException(
                     TypeError(
-                        f"You are trying to re-define the already existing class {node.name}. Use directly {node.name} without defining it again."
+                        f"You are trying to re-define the built-in '{node.name}'. Use a different class name."
                     ),
                     (node,),
                     (),
@@ -2330,7 +2393,7 @@ def _eval_class_def(
     )
     assign_res, new_namespace, new_tool_calls_chain, dependencies = _assign(
         value_value,
-        ast.Name(node.name, ast.Store()),
+        ast.Name(node.name, ast.Store(), lineno=node.lineno, col_offset=node.col_offset),
         namespace,
         tool_calls_chain,
         dependencies,
@@ -2391,13 +2454,86 @@ def _eval_function_def(
     dependencies: Iterable[value.CaMeLValue],
     eval_args: EvalArgs,
 ) -> EvalResult:
-    """Evaluates a function definition."""
-    return EvalResult(
-        _make_not_implemented_error(node, "Function definitions are not supported"),
-        namespace,
-        tool_calls_chain,
-        dependencies,
+    """Evaluates a function definition into a callable that interprets its body on each call.
+
+    Like a lambda but with a statement body and `return`. The function captures the
+    namespace (after it is itself defined, so recursion works), binds raw arguments to the
+    parameter names on each call, runs the body, and returns the value of the first
+    `return` it hits (or `None`). NOTE: tool calls made *inside* a function body are still
+    subject to the security policy, but are not recorded in the outer tool-call trace.
+    """
+    if node.decorator_list:
+        return EvalResult(
+            _make_not_implemented_error(node, "Decorators on functions are not supported"),
+            namespace,
+            tool_calls_chain,
+            dependencies,
+        )
+    arg_names = [a.arg for a in node.args.args]
+    body = node.body
+    # Mutable cell so the body can see the function itself (recursion) once it is assigned.
+    captured = {"namespace": namespace}
+
+    def function_impl(*raw_args):
+        local_vars = {
+            name: value.value_from_raw(raw, Capabilities.camel(), captured["namespace"], ())
+            for name, raw in zip(arg_names, raw_args)
+        }
+        call_namespace = captured["namespace"].add_variables(local_vars)
+        try:
+            body_result, _, _, _ = _eval_stmt_list(body, call_namespace, [], (), eval_args)
+        except _ReturnSignal as signal:
+            return signal.value.raw
+        match body_result:
+            case result.Ok(_):
+                return None
+            case result.Error(camel_exception):
+                raise camel_exception.exception
+
+    function_value = value.CaMeLFunction(node.name, function_impl, Capabilities.camel(), tuple(dependencies))
+    assign_res, namespace, tool_calls_chain, dependencies = _assign(
+        function_value, ast.Name(node.name, ast.Store(), lineno=node.lineno, col_offset=node.col_offset), namespace, tool_calls_chain, dependencies, eval_args
     )
+    if isinstance(assign_res, result.Error):
+        return EvalResult(assign_res, namespace, tool_calls_chain, dependencies)
+    captured["namespace"] = namespace
+    return EvalResult(result.Ok(value.CaMeLNone(Capabilities.default(), ())), namespace, tool_calls_chain, dependencies)
+
+
+def _eval_lambda(
+    node: ast.Lambda,
+    namespace: ns.Namespace,
+    tool_calls_chain: Sequence[FunctionCall],
+    dependencies: Iterable[value.CaMeLValue],
+    eval_args: EvalArgs,
+) -> EvalResult:
+    """Evaluates a lambda into a callable that interprets its body on each call.
+
+    The lambda captures the namespace at definition time. When called -- either directly
+    from interpreted code or as a `key=`/`func` argument to a builtin like `sorted`,
+    `max`, `min`, `filter` or `map`, which call it on raw values -- it wraps the raw
+    arguments back into CaMeL values, binds them to the parameter names, interprets the
+    body, and returns the raw result.
+    """
+    arg_names = [a.arg for a in node.args.args]
+    captured_namespace = namespace
+    body = node.body
+
+    def lambda_impl(*raw_args):
+        local_vars = {
+            name: value.value_from_raw(raw, Capabilities.camel(), captured_namespace, ())
+            for name, raw in zip(arg_names, raw_args)
+        }
+        local_namespace = captured_namespace.add_variables(local_vars)
+        body_result, _, _, _ = camel_eval(body, local_namespace, [], (), eval_args)
+        match body_result:
+            case result.Ok(v):
+                return v.raw
+            case result.Error(camel_exception):
+                raise camel_exception.exception
+
+    lambda_value = value.CaMeLFunction("<lambda>", lambda_impl, Capabilities.camel(), tuple(dependencies))
+    return EvalResult(result.Ok(lambda_value), namespace, tool_calls_chain, dependencies)
 
 
 def camel_eval(
@@ -2490,17 +2626,12 @@ def camel_eval(
             return EvalResult(
                 result.Ok(value.CaMeLNone(Capabilities.camel(), ())), namespace, tool_calls_chain, dependencies
             )
-        # The following are unsupported language constructs
+        # Generator expressions are evaluated eagerly, exactly like a list
+        # comprehension (the interpreter does not use lazy objects anyway). This lets
+        # common patterns like `all(... for x in xs)` / `any(...)` / `sum(...)` work.
         case ast.GeneratorExp():
-            return EvalResult(
-                _make_not_implemented_error(
-                    node,
-                    "Generator expressions are not supported. Use a list comprehension instead if possible.",
-                ),
-                namespace,
-                tool_calls_chain,
-                dependencies,
-            )
+            return _eval_list_comp(node, namespace, tool_calls_chain, dependencies, eval_args)
+        # The following are unsupported language constructs
         case ast.While():
             return EvalResult(
                 _make_not_implemented_error(node, "While statements are not supported. Use a for loop instead."),
@@ -2509,19 +2640,9 @@ def camel_eval(
                 dependencies,
             )
         case ast.Break():
-            return EvalResult(
-                _make_not_implemented_error(node, "Break statements are not supported."),
-                namespace,
-                tool_calls_chain,
-                dependencies,
-            )
+            raise _BreakSignal(namespace, tool_calls_chain, dependencies)
         case ast.Continue():
-            return EvalResult(
-                _make_not_implemented_error(node, "Continue statements are not supported."),
-                namespace,
-                tool_calls_chain,
-                dependencies,
-            )
+            raise _ContinueSignal(namespace, tool_calls_chain, dependencies)
         case ast.Match():
             return EvalResult(
                 _make_not_implemented_error(node, "Match statements are not supported."),
@@ -2531,23 +2652,21 @@ def camel_eval(
             )
         # Function and class definitions (not supported)
         case ast.Lambda():
-            return EvalResult(
-                _make_not_implemented_error(
-                    node,
-                    "Defining lambda functions is not supported. If you are operating on a list, consider using a list comprehension or a for loop.",
-                ),
-                namespace,
-                tool_calls_chain,
-                dependencies,
-            )
-        # Reuturn, yield, yield from (not supported)
+            return _eval_lambda(node, namespace, tool_calls_chain, dependencies, eval_args)
         case ast.Return():
-            return EvalResult(
-                _make_not_implemented_error(node, "Return statements are not supported."),
-                namespace,
-                tool_calls_chain,
-                dependencies,
+            if node.value is None:
+                raise _ReturnSignal(
+                    value.CaMeLNone(Capabilities.default(), ()), namespace, tool_calls_chain, dependencies
+                )
+            value_res, namespace, tool_calls_chain, dependencies = camel_eval(
+                node.value, namespace, tool_calls_chain, dependencies, eval_args
             )
+            match value_res:
+                case result.Error():
+                    return EvalResult(value_res, namespace, tool_calls_chain, dependencies)
+                case result.Ok(v):
+                    raise _ReturnSignal(v, namespace, tool_calls_chain, dependencies)
+        # yield, yield from (not supported)
         case ast.Yield():
             return EvalResult(
                 _make_not_implemented_error(node, "Yield statements are not supported."),
@@ -2713,4 +2832,21 @@ def parse_and_interpret_code(
             ),
         )
         return EvalResult(result.Error(CaMeLException(e, error_nodes, ())), namespace, tool_calls_chain, dependencies)
-    return EvalResult(*camel_eval(parsed_code, namespace, tool_calls_chain, dependencies, eval_args))
+    try:
+        return EvalResult(*camel_eval(parsed_code, namespace, tool_calls_chain, dependencies, eval_args))
+    except _LoopControlSignal:
+        # `break`/`continue` outside a loop, or `return` outside a function (ast.parse
+        # does not reject these).
+        error_nodes = (ast.expr(lineno=0, end_lineno=-1),)
+        return EvalResult(
+            result.Error(
+                CaMeLException(
+                    SyntaxError("'return', 'break' or 'continue' used outside of a function/loop"),
+                    error_nodes,
+                    (),
+                )
+            ),
+            namespace,
+            tool_calls_chain,
+            dependencies,
+        )
