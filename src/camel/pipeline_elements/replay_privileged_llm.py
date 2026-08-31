@@ -69,9 +69,14 @@ def _make_quarantined_llm_fn(messages: list[ad_types.ChatToolResultMessage]) -> 
         message = calls[i]
         i += 1
         output = yaml.safe_load(ad_types.get_text_content_as_str(message["content"]))
-        if issubclass(output_schema, pydantic.BaseModel):
+        if isinstance(output_schema, type) and issubclass(output_schema, pydantic.BaseModel):
             return output_schema(**output)
-        return output_schema(output)
+        # For non-BaseModel schemas (EmailStr, dict, dict[str, str], list[...], basic
+        # types, ...) the value can't be reconstructed by calling output_schema(output)
+        # directly (e.g. `EmailStr("...")` raises "EmailStr() takes no arguments"); use a
+        # TypeAdapter to validate/coerce it, matching how the live quarantined LLM builds
+        # the result.
+        return pydantic.TypeAdapter(output_schema).validate_python(output)
 
     return query_ai_assistant
 
@@ -79,6 +84,7 @@ def _make_quarantined_llm_fn(messages: list[ad_types.ChatToolResultMessage]) -> 
 def format_camel_exception(camel_exception: interpreter.CaMeLException, code: str) -> str:
     exception = camel_exception.exception
     node = camel_exception.nodes[-1]
+    lineno = node.lineno if hasattr(node, "lineno") else 0
     try:
         extracted_code = interpreter.extract_code_block(code)
     except interpreter.InvalidOutputError:
@@ -86,14 +92,14 @@ def format_camel_exception(camel_exception: interpreter.CaMeLException, code: st
     formatted_code = _highlight_exception_code(
         extracted_code,
         camel_exception.exception,
-        node.lineno,
+        lineno,
         node.col_offset if hasattr(node, "col_offset") else 0,
         node.end_lineno if hasattr(node, "end_lineno") else None,
         node.end_col_offset if hasattr(node, "end_col_offset") else None,
     )
     return f"""
 Traceback (most recent call last):
-File "<stdin>", line {camel_exception.nodes[-1].lineno}, in <module>
+File "<stdin>", line {lineno}, in <module>
 {formatted_code}
 
 {type(exception).__name__}: {exception}
