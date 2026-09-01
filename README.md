@@ -15,6 +15,25 @@ cp .env.example .env          # then fill in OPENAI_API_KEY / ANTHROPIC_API_KEY 
 set -a && source .env && set +a
 ```
 
+### Optional: AgentDyn suites
+
+To run the [AgentDyn](https://github.com/SaFo-Lab/AgentDyn) suites (`shopping`,
+`github`, `dailylife`), install the AgentDyn fork of `agentdojo` **instead of**
+the PyPI `agentdojo` pinned in `requirements.txt` (the fork keeps the same
+package name and API, and also contains the original four suites):
+
+```bash
+pip uninstall -y agentdojo
+git clone https://github.com/SaFo-Lab/AgentDyn.git
+pip install -e ./AgentDyn
+```
+
+Then pass the new suites explicitly, e.g.:
+
+```bash
+python main.py MODEL --run-attack --suites shopping github dailylife
+```
+
 Models are passed as `provider:model_name`, e.g. `openai:o3-2025-04-16`,
 `anthropic:claude-sonnet-4-5-20250929`, `google:gemini-2.5-pro-preview-06-05`, or
 `local:<name>` (see [Local models](#local--self-hosted-models)).
@@ -27,8 +46,10 @@ Models are passed as `provider:model_name`, e.g. `openai:o3-2025-04-16`,
 | **CaMeL**, no policies | `python main.py MODEL` |
 | **CaMeL + policies** | two steps (below) |
 
-Add `--run-attack` to any mode to inject AgentDojo's `important_instructions`
-attack and also report **security**; otherwise only no-attack **utility** is reported.
+Add `--run-attack` to any mode to inject an attack and also report **security**;
+otherwise only no-attack **utility** is reported. The attack defaults to AgentDojo's
+`important_instructions`; pick another with `--attack NAME` (see
+[Attacks](#attacks) below).
 
 **CaMeL + policies** is two steps — policies are applied only on *replay*, which
 reuses the saved traces (no LLM calls), so step 2 is cheap:
@@ -38,14 +59,45 @@ python main.py MODEL                          # step 1: generate traces
 python main.py MODEL --replay-with-policies   # step 2: enforce policies
 ```
 
-Use the **same** model and `--run-attack` setting in both steps, and do **not**
-pass `--q-llm` in step 1, or the replay won't find the traces.
+Use the **same** model, `--run-attack`, and `--attack` settings in both steps, and
+do **not** pass `--q-llm` in step 1, or the replay won't find the traces (traces are
+saved under a per-attack directory).
+
+## Attacks
+
+`--attack NAME` selects any attack registered in AgentDojo (e.g.
+`important_instructions` (default), `ignore_previous`, `tool_knowledge`, `direct`,
+`dos`). Also bundled is [**ChatInject**](https://github.com/hwanchang00/ChatInject),
+which formats the injection as the target model's *own chat template* so the model
+reads it as real conversation turns:
+
+| `--attack` | Description |
+| --- | --- |
+| `chat_inject_qwen3` | Template-only (single fake system/user/assistant exchange), Qwen3 template |
+| `chat_inject_glm` | Same, GLM-4.5 template |
+| `chat_inject_qwen3_with_utility_system_multiturn_7` | Multi-turn benign dialogue then the goal, Qwen3 template |
+| `chat_inject_qwen3_with_utility_authority_endorsement_system_multiturn_7` | Multi-turn with authority-endorsement persuasion, Qwen3 template |
+
+(swap `qwen3`→`glm` for the GLM template of either multi-turn variant). Pick the
+template that matches your `--model`; the wrong template silently no-ops.
+
+```bash
+python main.py local:Qwen3.6-35B-A3B --run-attack \
+  --attack chat_inject_qwen3_with_utility_system_multiturn_7 --suites banking slack travel
+```
+
+The multi-turn variants load a **pre-generated per-goal dialogue** from
+`src/camel/attacks/chatinject_data/`. The shipped data covers the banking / slack /
+travel injection goals only; an uncovered goal (e.g. the AgentDyn suites) raises a
+clear `ValueError`. The template-only variants work on every suite.
 
 ## Common options
 
 `--reasoning-effort {low,medium,high}` (OpenAI reasoning models only) ·
 `--thinking-budget-tokens N` (Anthropic) ·
-`--suites workspace banking travel slack` · `--user-tasks user_task_0 ...` ·
+`--suites workspace banking travel slack` (plus `shopping github dailylife` with
+[AgentDyn](#optional-agentdyn-suites) installed) · `--attack NAME` (see
+[Attacks](#attacks)) · `--user-tasks user_task_0 ...` ·
 `--q-llm provider:model` (cheaper quarantined LLM; single-step only) ·
 `--eval-mode {normal,strict}` · `--force-rerun`.
 Full list: `python main.py --help`.
@@ -68,6 +120,36 @@ Notes:
   prompts are skipped (scored as failed) rather than crashing the run.
 - Open models retry more (weaker structured output / Python). `CAMEL_DEBUG_QLLM=1`
   prints the quarantined-LLM input/output for debugging.
+
+## ASB Observation Prompt Injection (OPI)
+
+Besides AgentDojo, the repo vendors the **Observation Prompt Injection** slice of
+[ASB](https://github.com/agiresearch/ASB) under `asb/`, with **CaMeL wired in as a defense**
+(`defense_type: camel`). ASB is its own agent framework (AIOS + `pyopenagi`), not AgentDojo; OPI
+appends an attacker instruction to a tool's observation, and success (ASR) means the attacker's
+goal appears in the trajectory (RR = the benign task still succeeds).
+
+Setup (on top of the CaMeL env, pointed at the same local vLLM endpoint):
+
+```bash
+pip install -r asb/requirements-opi.txt
+export LOCAL_BASE_URL=http://localhost:8000/v1 LOCAL_API_KEY=EMPTY
+cd asb
+bash scripts/run_opi.sh          # undefended baseline — confirm ASR > 0 first
+bash scripts/run_opi.sh camel    # CaMeL defense — expect ASR to drop
+python scripts/res_retrieval.py  # aggregate ASR/RR from logs/
+```
+
+How CaMeL defends here (`asb/camel_adapter/`): the adapter drives the **real** `PrivilegedLLM`
+pipeline over ASB's tools — same code-gen **retry loop**, **quarantined LLM** (`query_ai_assistant`),
+`default_system_prompt_generator`, and untrusted output tagging via CaMeL's own `AgentDojoFunction`
+(so CaMeL's utility is not understated). ASB tools are wrapped as AgentDojo `Function`s (benign ones
+carry the untrusted OPI injection in their observation); the attacker tool is registered — hence
+advertised, exactly like the ASB baseline — but an `ASBSecurityPolicyEngine` default-deny allowlist
+denies it. Because ASB tools are parameterless, the defense leans on trusted-task code-gen plus the
+allowlist rather than argument-level taint, so treat the ASR/RR numbers as something to **validate
+empirically** per model. The vendored slice omits ASB's DPI/MP/PoT and memory-DB paths; heavy deps
+(torch/transformers/langchain) are import-guarded.
 
 ## FAQ
 

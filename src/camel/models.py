@@ -17,6 +17,7 @@ from src.camel.pipeline_elements.anthropic_tool_filter import AnthropicLLMToolFi
 from src.camel.pipeline_elements.privileged_llm import PrivilegedLLM
 from src.camel.pipeline_elements.replay_privileged_llm import PrivilegedLLMReplayer, UserInjectionTasksGetter
 from src.camel.pipeline_elements.security_policies import (
+    AGENTDYN_SECURITY_POLICY_ENGINES,
     ADNoSecurityPolicyEngine,
     AgentDojoSecurityPolicyEngine,
     BankingSecurityPolicyEngine,
@@ -64,6 +65,9 @@ _SECURITY_POLICY_ENGINES: dict[str, type[AgentDojoSecurityPolicyEngine]] = {
     "travel": TravelSecurityPolicyEngine,
     "banking": BankingSecurityPolicyEngine,
     "slack": SlackSecurityPolicyEngine,
+    # AgentDyn suites (https://github.com/SaFo-Lab/AgentDyn); the suites themselves
+    # are only loadable when the AgentDyn fork of agentdojo is installed.
+    **AGENTDYN_SECURITY_POLICY_ENGINES,
 }
 
 

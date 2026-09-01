@@ -17,10 +17,12 @@
 import dataclasses
 import time
 import types
+import warnings
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any, TypeVar
 
 import pydantic
+import pydantic_ai
 import yaml
 from agentdojo import agent_pipeline, functions_runtime
 from agentdojo import types as ad_types
@@ -41,6 +43,7 @@ from src.camel.pipeline_elements.agentdojo_function import (
     make_agentdojo_namespace,
 )
 from src.camel.pipeline_elements.security_policies import (
+    AGENTDYN_DATETIME_ENVIRONMENTS,
     AgentDojoSecurityPolicyEngine,
 )
 
@@ -466,7 +469,7 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
                 "NaiveDatetime",
                 "timezone",
             }
-            if not isinstance(env, WorkspaceEnvironment | TravelEnvironment)
+            if not isinstance(env, (WorkspaceEnvironment, TravelEnvironment, *AGENTDYN_DATETIME_ENVIRONMENTS))
             else set()
         )
 
@@ -488,19 +491,42 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
         dependencies = ()
 
         for _ in range(self.max_attempts):
-            (model_output, _, interpretation_error, messages, privileged_llm_messages, namespace, dependencies) = (
-                self._generate_and_interpret_code(
-                    query,
-                    runtime,
-                    namespace,
-                    env,
-                    messages,
-                    privileged_llm_messages,
-                    system_prompt,
-                    model_output,
-                    dependencies,
+            try:
+                (model_output, _, interpretation_error, messages, privileged_llm_messages, namespace, dependencies) = (
+                    self._generate_and_interpret_code(
+                        query,
+                        runtime,
+                        namespace,
+                        env,
+                        messages,
+                        privileged_llm_messages,
+                        system_prompt,
+                        model_output,
+                        dependencies,
+                    )
                 )
-            )
+            except pydantic_ai.UnexpectedModelBehavior as e:
+                # "Model token limit ... exceeded before any response was generated" (raised by the
+                # privileged or quarantined LLM) would otherwise abort the whole benchmark. Fail
+                # just this task and move on to scoring (it is scored as a utility failure). See also
+                # the fair fix that raises the q-LLM's max_tokens in quarantined_llm.py.
+                if "token limit" not in str(e).lower():
+                    raise
+                warnings.warn(f"Skipping task: model token limit exceeded ({e}).")
+                messages = [
+                    *messages,
+                    ad_types.ChatAssistantMessage(
+                        role="assistant",
+                        content=[
+                            ad_types.text_content_block_from_string(
+                                "The task was aborted because the model's token limit was exceeded. "
+                                "This message is added by the system and does not come from the assistant."
+                            )
+                        ],
+                        tool_calls=None,
+                    ),
+                ]
+                break
 
             if not interpretation_error:
                 break  # Exit loop if no error
