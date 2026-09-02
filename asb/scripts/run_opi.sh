@@ -22,6 +22,8 @@ CLEAN="${CLEAN:-}"
 # Concurrent tasks. ASB's original 5000 exhausts file descriptors and overloads the LLM server;
 # keep it modest and match it to what your SGLang endpoint can handle.
 MAX_WORKERS="${MAX_WORKERS:-16}"
+# Where the per-task JSON traces go. Default: <res_file dir>/json (logs/observation_prompt_injection/json).
+LOG_DIR="${LOG_DIR:-}"
 # Reasoning models (Qwen3 with --reasoning-parser) spend tokens on <think> before the tool call;
 # ASB's default 256 truncates them. Bump the generation budget.
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-2048}"
@@ -73,6 +75,7 @@ python main_attacker.py \
   --react_max_turns "$REACT_MAX_TURNS" \
   --opi_inject_limit "$OPI_INJECT_LIMIT" \
   --max_workers "$MAX_WORKERS" \
+  ${LOG_DIR:+--log_dir "$LOG_DIR"} \
   --max_new_tokens "$MAX_NEW_TOKENS" \
   --database /nonexistent_no_memory_db \
   --res_file "$RES" \

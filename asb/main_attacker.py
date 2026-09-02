@@ -183,18 +183,24 @@ def _pipeline_name(args):
     return name
 
 
+def _json_root(args):
+    """Root dir for JSON traces: --log_dir if given, else <res_file dir>/json."""
+    if getattr(args, "log_dir", None):
+        return args.log_dir
+    return os.path.join(os.path.dirname(args.res_file) or "logs", "json")
+
+
 def _task_json_path(args, agent_short, task_text, attacker_tool):
     """Deterministic per-task trace path, shared by the resume-skip check and the JSON dump.
 
     Mirrors AgentDojo's nesting exactly:
-        logs/json/<pipeline>/<suite=agent>/<user_task>/<attack|none>/<injection_task|none>.json
+        <log_dir>/<pipeline>/<suite=agent>/<user_task>/<attack|none>/<injection_task|none>.json
     A no-attack (clean) run lands at .../<user_task>/none/none.json.
     """
     attacked = bool(getattr(args, "observation_prompt_injection", False))
     attack_name = args.attack_type if attacked else "none"
     injection = _slug(attacker_tool) if attacked else "none"
-    base = os.path.dirname(args.res_file) or "logs"
-    out_dir = os.path.join(base, "json", _pipeline_name(args), agent_short,
+    out_dir = os.path.join(_json_root(args), _pipeline_name(args), agent_short,
                            _slug(task_text, 40), _slug(attack_name))
     return out_dir, os.path.join(out_dir, f"{injection}.json")
 
