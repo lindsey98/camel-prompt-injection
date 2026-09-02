@@ -16,9 +16,7 @@ OPI_INJECT_LIMIT="${OPI_INJECT_LIMIT:-1}"
 # Resume by default: tasks whose JSON trace already exists are skipped (reusing their metrics).
 # Set FORCE_RERUN=1 to recompute everything from scratch.
 FORCE_RERUN="${FORCE_RERUN:-}"
-# CLEAN=1 runs with NO attack (no OPI injection, no attacker tool) to measure the clean-utility
-# ceiling. Traces go to a separate <workflow>_clean label, and each task runs once (not per tool).
-CLEAN="${CLEAN:-}"
+# For a no-attack (clean) utility run, use the dedicated scripts/run_clean.sh instead.
 # Concurrent tasks. ASB's original 5000 exhausts file descriptors and overloads the LLM server;
 # keep it modest and match it to what your SGLang endpoint can handle.
 MAX_WORKERS="${MAX_WORKERS:-16}"
@@ -53,13 +51,8 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 export PYTHONPATH="$(pwd):${REPO_ROOT}${PYTHONPATH:+:$PYTHONPATH}"
 
 LABEL="${DEFENSE:-baseline}"
-[ -n "$CLEAN" ] && [ -z "$DEFENSE" ] && LABEL="clean"
 mkdir -p logs/observation_prompt_injection
 RES="logs/observation_prompt_injection/${MODEL}_${ATTACK_TYPE}_${LABEL}.csv"
-
-# No-attack (clean) run uses --clean; otherwise inject via OPI.
-INJECT_ARG=(--observation_prompt_injection)
-[ -n "$CLEAN" ] && INJECT_ARG=(--clean)
 
 DEFENSE_ARG=()
 [ -n "$DEFENSE" ] && DEFENSE_ARG=(--defense_type "$DEFENSE")
@@ -69,7 +62,7 @@ echo "Model=$MODEL  attack_type=$ATTACK_TYPE  run=${LABEL}  attacker_tools=$ATTA
 python main_attacker.py \
   --llm_name "$MODEL" \
   --use_backend local \
-  "${INJECT_ARG[@]}" \
+  --observation_prompt_injection \
   --attack_type "$ATTACK_TYPE" \
   --attacker_tools_path "$ATTACKER_TOOLS" \
   --task_num "$TASK_NUM" \
