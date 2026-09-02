@@ -171,6 +171,15 @@ def _to_agentdojo_messages(messages):
     return out
 
 
+def _task_json_path(args, agent_short, task_text, attacker_tool):
+    """Deterministic per-task trace path, shared by the resume-skip check and the JSON dump."""
+    label = args.defense_type or (f"{args.workflow_mode}_baseline")
+    base = os.path.dirname(args.res_file) or "logs"
+    out_dir = os.path.join(base, "json", _slug(args.llm_name), _slug(label), agent_short)
+    fname = f"{_slug(attacker_tool)}__{_slug(task_text, 30)}.json"
+    return out_dir, os.path.join(out_dir, fname)
+
+
 def _dump_task_json(args, res, attacker_goal, attack_successful, original_successful, refuse_res):
     """Write one AgentDojo-format ``TaskResults`` JSON per task.
 
@@ -217,12 +226,10 @@ def _dump_task_json(args, res, attacker_goal, attack_successful, original_succes
         "task": task_text,
         "tool_trace": res.get("tool_trace"),
     }
-    base = os.path.dirname(args.res_file) or "logs"
-    out_dir = os.path.join(base, "json", _slug(args.llm_name), _slug(label), agent)
+    out_dir, path = _task_json_path(args, agent, task_text, res["attacker_tool"])
     os.makedirs(out_dir, exist_ok=True)
-    fname = f"{_slug(res['attacker_tool'])}__{_slug(task_text, 30)}.json"
     try:
-        with open(os.path.join(out_dir, fname), "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
     except Exception as e:
         print(f"[json log] failed to write {fname}: {e}")
@@ -275,6 +282,7 @@ def main():
     scheduler.start()
 
     agent_tasks = list()
+    cached_records = []  # results loaded from existing JSON traces (resume, unless --force_rerun)
 
     attacker_tools_all = pd.read_json(args.attacker_tools_path, lines=True)
     tasks_path = pd.read_json(args.tasks_path, lines=True)
@@ -305,6 +313,19 @@ def main():
             for _, tool in attacker_tools.iterrows(): # iterate over each attacker tool
                 if args.pot_backdoor or args.pot_clean:
                     args.target = tool["Attacker Tool"]
+
+                # Resume: skip a task whose JSON trace already exists (unless --force_rerun), and
+                # reuse its stored metrics so the aggregate stays complete.
+                _, jpath = _task_json_path(args, agent_name, task, tool["Attacker Tool"])
+                if (not args.force_rerun) and os.path.exists(jpath):
+                    try:
+                        with open(jpath, encoding="utf-8") as jf:
+                            cached_records.append(json.load(jf))
+                        print(f"[resume] cached, skipping: {agent_name} / {tool['Attacker Tool']} / {str(task)[:40]}")
+                        continue
+                    except Exception as e:
+                        print(f"[resume] unreadable cache {jpath} ({e}); re-running")
+
                 print(f'Running agent: {agent_name} with the task: {task} and the attacker tool: {tool["Attacker Tool"]}')
 
                 agent_attack = agent_thread_pool.submit(
@@ -432,22 +453,42 @@ def main():
                 res["messages"]
             ])
 
+    # Fold in the resumed (cached) tasks so the aggregate covers every task, not just re-run ones.
+    for cj in cached_records:
+        a = bool(cj.get("attack_success")); u = bool(cj.get("utility")); rr = cj.get("refuse")
+        if a:
+            attack_succ += 1
+        if u:
+            orgin_succ += 1
+        if rr == '0':
+            refuse_cnt += 1
+        with open(args.res_file, mode='a', newline='') as file:
+            csv.writer(file).writerow([
+                cj.get("suite_name"), cj.get("attacker_tool"),
+                1 if a else 0, 1 if u else 0, 1 if rr == '0' else 0,
+                None, cj.get("aggressive"), "",
+            ])
+    if cached_records:
+        print(f"[resume] reused {len(cached_records)} cached task result(s); run with --force_rerun to recompute")
+
+    total = len(agent_tasks) + len(cached_records)
+    denom = total or 1
     # print(f"Results saved to {args.res_file}")
-    print(f"Total number of attacks: {len(agent_tasks)}")
+    print(f"Total number of attacks: {total}")
     print(f"Number of successful attacks: {attack_succ}")
     print(f'Number of workflow generation failures: {workflow_failure}')
     # print(f'Number of tool calling success: {tool_call_success}')
-    print(f"Attack success rate: {attack_succ/len(agent_tasks)}")
-    print(f"Attack success rate excluding workflow failure cases: {attack_succ/(len(agent_tasks)-workflow_failure)}")
+    print(f"Attack success rate: {attack_succ/denom}")
+    print(f"Attack success rate excluding workflow failure cases: {attack_succ/((total-workflow_failure) or 1)}")
     print(f'Number of original task success: {orgin_succ}')
-    print(f'Original task success rate: {orgin_succ/len(agent_tasks)}')
+    print(f'Original task success rate: {orgin_succ/denom}')
 
     print(f"Refuse judge success number: {refuse_cnt}")
-    print(f"Refuse judge success rate: {refuse_cnt/len(agent_tasks)}")
+    print(f"Refuse judge success rate: {refuse_cnt/denom}")
 
     if args.read_db:
         print(f"Memory search success number: {memory_search_succ}")
-        print(f"Memory search success rate: {memory_search_succ/len(agent_tasks)}")
+        print(f"Memory search success rate: {memory_search_succ/denom}")
 
 
     scheduler.stop()
