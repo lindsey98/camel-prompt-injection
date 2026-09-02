@@ -104,7 +104,8 @@ def judge_response(model_response):
     # user = f'''User Request: "{question}"\nModel Response: "{model_response}"'''
     user = f'''{model_response}'''
 
-    print(user)
+    if os.getenv("ASB_VERBOSE"):
+        print(user)
 
     try:
         completion = client.chat.completions.create(
@@ -283,6 +284,7 @@ def main():
 
     agent_tasks = list()
     cached_records = []  # results loaded from existing JSON traces (resume, unless --force_rerun)
+    verbose = bool(os.getenv("ASB_VERBOSE"))  # ASB_VERBOSE=1 restores the full per-task dumps
 
     attacker_tools_all = pd.read_json(args.attacker_tools_path, lines=True)
     tasks_path = pd.read_json(args.tasks_path, lines=True)
@@ -321,12 +323,14 @@ def main():
                     try:
                         with open(jpath, encoding="utf-8") as jf:
                             cached_records.append(json.load(jf))
-                        print(f"[resume] cached, skipping: {agent_name} / {tool['Attacker Tool']} / {str(task)[:40]}")
+                        if verbose:
+                            print(f"[resume] cached, skipping: {agent_name} / {tool['Attacker Tool']} / {str(task)[:40]}")
                         continue
                     except Exception as e:
                         print(f"[resume] unreadable cache {jpath} ({e}); re-running")
 
-                print(f'Running agent: {agent_name} with the task: {task} and the attacker tool: {tool["Attacker Tool"]}')
+                if verbose:
+                    print(f'Running agent: {agent_name} with the task: {task} and the attacker tool: {tool["Attacker Tool"]}')
 
                 agent_attack = agent_thread_pool.submit(
                     agent_factory.run_agent,
@@ -363,37 +367,36 @@ def main():
         ])
 
 
-    for r in as_completed(agent_tasks):
+    total_new = len(agent_tasks)
+    pbar = tqdm(as_completed(agent_tasks), total=total_new, desc="ASB tasks", unit="task")
+    for done_i, r in enumerate(pbar, 1):
         res = r.result()
-        print("**********************************")
-        print(args)
+        if verbose:
+            print("**********************************")
+            print(args)
 
         attacker_goal = attacker_tools_all[attacker_tools_all["Attacker Tool"] == res["attacker_tool"]]['Attack goal'].iloc[0]
         attack_successful = check_attack_success(res["messages"], args, attacker_goal)
-
         if attack_successful:
-            print("Attack successful.")
             attack_succ += 1
-        else:
-            print("Attack failed.")
 
         original_successful = check_original_success(res["messages"], args, res["normal_tools"])
         if original_successful:
             orgin_succ += 1
-            print("Original task successful.")
-        else:
-            print("Original task failed.")
-
-        # workflow_failure_flag = res['workflow_failure']
-        # if workflow_failure_flag:
-        #     workflow_failure += 1
-        #     print("Workflow generation failed.")
-
-        for message in res["messages"]:
-            print(message)
 
         attack_tool = res["attacker_tool"]
-        print(f"Attack Tool: {attack_tool}")
+        agent_short = res["agent_name"].split('/')[-1]
+        # AgentDojo-style per-task line: which agent, which injection task, and the outcome.
+        tqdm.write(f"[{done_i}/{total_new}] {agent_short} / {attack_tool}  "
+                   f"ASR={1 if attack_successful else 0} util={1 if original_successful else 0}")
+        pbar.set_postfix(ASR=f"{attack_succ/done_i:.2f}", util=f"{orgin_succ/done_i:.2f}")
+
+        if verbose:
+            print("Attack successful." if attack_successful else "Attack failed.")
+            print("Original task successful." if original_successful else "Original task failed.")
+            for message in res["messages"]:
+                print(message)
+            print(f"Attack Tool: {attack_tool}")
 
         # The plan-then-execute layout put the task at messages[3]; ReAct puts it at messages[1].
         # Find it by role so neither mode (nor a short trajectory) crashes here.
@@ -424,14 +427,17 @@ def main():
         refuse_res = judge_response(str(final_texts[-1])) if final_texts else '1'
 
         if refuse_res == '0':
-            print("The model response doesn't comply with the user request.")
             refuse_cnt += 1
+            if verbose:
+                print("The model response doesn't comply with the user request.")
         elif refuse_res == '1':
-            print("The model response complies with the user request.")
+            if verbose:
+                print("The model response complies with the user request.")
         else:
             print(f"Refuse judge Error: {refuse_res}")
 
-        print("**********************************")
+        if verbose:
+            print("**********************************")
 
         # AgentDojo-style per-task JSON trace (full messages + metrics + metadata).
         _dump_task_json(args, res, attacker_goal, attack_successful, original_successful, refuse_res)
