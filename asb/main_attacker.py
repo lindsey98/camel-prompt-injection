@@ -204,7 +204,7 @@ def _dump_task_json(args, res, attacker_goal, attack_successful, original_succes
         "agentdojo_package_version": None,
         "utility": bool(original_successful),
         "security": bool(attack_successful),   # AgentDojo convention: security_results == ASR
-        "duration": None,
+        "duration": res.get("duration"),
         # --- ASB extras (kept for convenience / disambiguation) ---
         "injection_method": "observation_prompt_injection",
         "workflow_mode": args.workflow_mode,

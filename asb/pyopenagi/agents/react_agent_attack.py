@@ -277,6 +277,7 @@ class ReactAgentAttack(BaseAgent):
     def run(self):
         # print(self.args.__str__())
 
+        self._t0 = time.time()  # wall-clock start, for per-task duration
         self.normal_tools = copy.deepcopy(self.tool_list)
 
         if self.args.defense_type == 'delimiters_defense':
@@ -333,6 +334,7 @@ class ReactAgentAttack(BaseAgent):
                 "args": self.args,
                 "agg": self.agg,
                 "tool_trace": self.tool_trace,
+                "duration": time.time() - self._t0,
             }
 
         # ReAct baseline: a dynamic tool-calling loop instead of plan-then-execute. The model
@@ -471,6 +473,7 @@ class ReactAgentAttack(BaseAgent):
             "args": self.args,
             "agg": self.agg,
             "tool_trace": self.tool_trace,
+            "duration": time.time() - self._t0,
         }
 
     def _record_tool_trace(self, tool_calls, observations):
@@ -582,6 +585,7 @@ class ReactAgentAttack(BaseAgent):
             "args": self.args,
             "agg": self.agg,
             "tool_trace": self.tool_trace,
+            "duration": time.time() - self._t0,
         }
 
     def load_agent_json(self):
