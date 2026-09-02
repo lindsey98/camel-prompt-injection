@@ -70,6 +70,27 @@ class LocalLLM(BaseLLM):
         merged = {"role": "system", "content": "\n\n".join(p for p in system_parts if p)}
         return [merged, *others]
 
+    @staticmethod
+    def _sanitize_tools(tools):
+        """Give every tool a valid JSON-schema ``parameters`` object.
+
+        ASB's tool schemas set ``parameters: null`` (and the attacker tool omits the key). OpenAI
+        tolerates that, but stricter tool-call parsers (e.g. SGLang ``qwen3_coder``) may fail to
+        emit a tool call for such tools, so the model answers in plain text instead. Coerce
+        ``parameters`` into ``{"type":"object","properties":{}}`` when it is missing / not a dict.
+        """
+        if not tools:
+            return tools
+        fixed = []
+        for t in tools:
+            t = dict(t)
+            fn = dict(t.get("function", {}))
+            if not isinstance(fn.get("parameters"), dict):
+                fn["parameters"] = {"type": "object", "properties": {}}
+            t["function"] = fn
+            fixed.append(t)
+        return fixed
+
     def process(self, agent_process, temperature=0.0):
         agent_process.set_status("executing")
         agent_process.set_start_time(time.time())
@@ -82,7 +103,7 @@ class LocalLLM(BaseLLM):
             kwargs = dict(
                 model=self.model_name,
                 messages=messages,
-                tools=agent_process.query.tools,
+                tools=self._sanitize_tools(agent_process.query.tools),
                 max_tokens=self.max_new_tokens,
                 seed=0,
                 temperature=temperature,
