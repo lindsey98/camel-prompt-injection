@@ -299,6 +299,11 @@ def main():
         agent_log_mode=agent_log_mode,
     )
 
+    # Load the CaMeL adapter once, here in the main thread, so worker threads don't race to import
+    # it concurrently (which yields partially-initialised agentdojo modules / circular imports).
+    if args.defense_type == "camel":
+        import camel_adapter  # noqa: F401
+
     agent_thread_pool = ThreadPoolExecutor(max_workers=args.max_workers)
 
     scheduler.start()

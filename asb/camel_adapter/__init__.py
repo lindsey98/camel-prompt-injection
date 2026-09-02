@@ -24,6 +24,15 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+# Fully initialise agentdojo's suite registry BEFORE importing the CaMeL kernel. Otherwise
+# privileged_llm's `from agentdojo.default_suites.v1.banking.task_suite import BankingEnvironment`
+# triggers a circular import in the AgentDyn fork (v1_1_1 user_tasks <-> v1 banking task_suite,
+# because load_suites has not run yet).
+try:
+    import agentdojo.task_suite.load_suites  # noqa: F401
+except Exception:
+    pass
+
 from .defense import CaMeLDefense
 
 __all__ = ["CaMeLDefense"]
