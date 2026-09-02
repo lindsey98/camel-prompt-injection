@@ -13,10 +13,13 @@ DEFENSE="${1:-}"                                   # "" (baseline) or "camel"
 MODEL="${MODEL:-Qwen3.6-35B-A3B}"      # must match the vLLM --served-model-name
 ATTACK_TYPE="${ATTACK_TYPE:-context_ignoring}"
 ATTACKER_TOOLS="${ATTACKER_TOOLS:-data/attack_tools_test.jsonl}"  # small slice for a smoke test
-TASK_NUM="${TASK_NUM:-1}"
+TASK_NUM="${TASK_NUM:-5}"
 # Reasoning models (Qwen3 with --reasoning-parser) spend tokens on <think> before the tool call;
 # ASB's default 256 truncates them. Bump the generation budget.
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-2048}"
+# The ASB react agent doesn't need reasoning; thinking just burns the token budget and truncates
+# the JSON plan / tool call. Disable it by default (set LOCAL_DISABLE_THINKING="" to re-enable).
+export LOCAL_DISABLE_THINKING="${LOCAL_DISABLE_THINKING-1}"
 
 # Local vLLM is on localhost: never route it through an HTTP proxy.
 export no_proxy="localhost,127.0.0.1,0.0.0.0${no_proxy:+,$no_proxy}"

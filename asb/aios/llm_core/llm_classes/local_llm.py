@@ -113,6 +113,12 @@ class LocalLLM(BaseLLM):
             # LOCAL_NO_PARALLEL_TOOL_CALLS_FLAG=1 to skip sending it.
             if agent_process.query.tools and not os.getenv("LOCAL_NO_PARALLEL_TOOL_CALLS_FLAG"):
                 kwargs["parallel_tool_calls"] = False
+            # Reasoning models (Qwen3 served with --reasoning-parser) burn the token budget on
+            # <think> before emitting the JSON plan / tool call, which truncates them. The ASB react
+            # agent does not need reasoning, so allow disabling it via LOCAL_DISABLE_THINKING=1
+            # (Qwen3 chat template honours chat_template_kwargs.enable_thinking=false).
+            if os.getenv("LOCAL_DISABLE_THINKING"):
+                kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
             response = self.model.chat.completions.create(**kwargs)
             response_message = response.choices[0].message.content
             tool_calls = self.parse_tool_calls(
