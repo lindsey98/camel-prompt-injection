@@ -71,8 +71,10 @@ class LocalLLM(BaseLLM):
                 seed=0,
                 temperature=temperature,
             )
-            # Single-tool-call parsers (e.g. vLLM llama3_json) reject parallel calls.
-            if agent_process.query.tools:
+            # Single-tool-call parsers (e.g. vLLM llama3_json) reject parallel calls. Some vLLM
+            # builds reject the `parallel_tool_calls` param itself with a 400 -> set
+            # LOCAL_NO_PARALLEL_TOOL_CALLS_FLAG=1 to skip sending it.
+            if agent_process.query.tools and not os.getenv("LOCAL_NO_PARALLEL_TOOL_CALLS_FLAG"):
                 kwargs["parallel_tool_calls"] = False
             response = self.model.chat.completions.create(**kwargs)
             response_message = response.choices[0].message.content
@@ -86,25 +88,24 @@ class LocalLLM(BaseLLM):
                 )
             )
         except openai.APIConnectionError as e:
-            agent_process.set_response(
-                Response(response_message=f"Server connection error: {e.__cause__}")
-            )
-        except openai.RateLimitError as e:
-            agent_process.set_response(
-                Response(response_message=f"RATE LIMIT error {e.status_code}: (e.response)")
-            )
+            self._report_llm_error(agent_process, "Server connection error", e, getattr(e, "__cause__", None))
         except openai.APIStatusError as e:
-            agent_process.set_response(
-                Response(response_message=f"STATUS error {e.status_code}: (e.response)")
-            )
-        except openai.BadRequestError as e:
-            agent_process.set_response(
-                Response(response_message=f"BAD REQUEST error {e.status_code}: (e.response)")
-            )
+            # Covers RateLimitError / BadRequestError (subclasses). Surface the real body.
+            body = getattr(getattr(e, "response", None), "text", None) or getattr(e, "message", None)
+            self._report_llm_error(agent_process, f"STATUS error {getattr(e, 'status_code', '?')}", e, body)
         except Exception as e:
-            agent_process.set_response(
-                Response(response_message=f"An unexpected error occurred: {e}")
-            )
+            self._report_llm_error(agent_process, "An unexpected error occurred", e, None)
 
         agent_process.set_status("done")
         agent_process.set_end_time(time.time())
+
+    def _report_llm_error(self, agent_process, label, exc, detail=None):
+        msg = f"{label}: {detail if detail is not None else exc}"
+        # Print + log so the real cause (e.g. model-name mismatch, unsupported param) is visible
+        # instead of an opaque "STATUS error 400".
+        print(f"[LocalLLM] {msg}")
+        try:
+            self.logger.log(f"[LocalLLM] {msg}\n", level="warning")
+        except Exception:
+            pass
+        agent_process.set_response(Response(response_message=msg))

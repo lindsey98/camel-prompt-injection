@@ -10,7 +10,7 @@
 set -euo pipefail
 
 DEFENSE="${1:-}"                                   # "" (baseline) or "camel"
-MODEL="${MODEL:-Qwen3-30B-A3B-Instruct-2507}"      # must match the vLLM --served-model-name
+MODEL="${MODEL:-Qwen3.6-35B-A3B}"      # must match the vLLM --served-model-name
 ATTACK_TYPE="${ATTACK_TYPE:-context_ignoring}"
 ATTACKER_TOOLS="${ATTACKER_TOOLS:-data/attack_tools_test.jsonl}"  # small slice for a smoke test
 TASK_NUM="${TASK_NUM:-1}"
