@@ -18,8 +18,11 @@ TASK_NUM="${TASK_NUM:-5}"
 # plan (diagnostic: removes the planning variable, only affects the baseline, not CaMeL);
 # react = dynamic tool-calling loop (full OPI attack surface). Each ASB agent has only 2 normal
 # tools, so ~4 turns suffice; REACT_MAX_TURNS lets you raise the cap if a task ever hits it.
-WORKFLOW_MODE="${WORKFLOW_MODE:-automatic}"
+WORKFLOW_MODE="${WORKFLOW_MODE:-react}"
 REACT_MAX_TURNS="${REACT_MAX_TURNS:-6}"
+# How many tool observations carry the OPI injection. 0 = every one (ASB default, unrealistic);
+# 1 = only the first tool result (a single compromised data source, the realistic case).
+OPI_INJECT_LIMIT="${OPI_INJECT_LIMIT:-1}"
 # Reasoning models (Qwen3 with --reasoning-parser) spend tokens on <think> before the tool call;
 # ASB's default 256 truncates them. Bump the generation budget.
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-2048}"
@@ -63,6 +66,7 @@ python main_attacker.py \
   --task_num "$TASK_NUM" \
   --workflow_mode "$WORKFLOW_MODE" \
   --react_max_turns "$REACT_MAX_TURNS" \
+  --opi_inject_limit "$OPI_INJECT_LIMIT" \
   --max_new_tokens "$MAX_NEW_TOKENS" \
   --database /nonexistent_no_memory_db \
   --res_file "$RES" \
