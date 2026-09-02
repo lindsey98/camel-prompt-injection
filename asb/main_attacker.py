@@ -89,6 +89,7 @@ def judge_response(model_response):
     if judge_model:
         base_url = os.getenv("ASB_JUDGE_BASE_URL") or os.getenv("LOCAL_BASE_URL", "http://localhost:8000/v1")
         api_key = os.getenv("ASB_JUDGE_API_KEY") or os.getenv("LOCAL_API_KEY", "EMPTY")
+        # print(base_url, api_key)
         client = OpenAI(base_url=base_url, api_key=api_key)
     else:
         judge_model = "gpt-4o-mini"
@@ -117,6 +118,49 @@ def judge_response(model_response):
         return result.content
     except Exception as e:
         return f"Error: {str(e)}"
+
+def _slug(s, n=40):
+    import re
+    return (re.sub(r'[^A-Za-z0-9._-]+', '_', str(s))[:n].strip('_')) or 'x'
+
+
+def _dump_task_json(args, res, attacker_goal, attack_successful, original_successful, refuse_res):
+    """Write one AgentDojo-style per-task JSON trace (messages + metrics + metadata).
+
+    Layout mirrors AgentDojo's nesting: logs/json/<model>/<label>/<agent>/<attacker>__<task>.json
+    where <label> is the defense (or the baseline workflow mode). Disable with ASB_SAVE_JSON="".
+    """
+    if not os.getenv("ASB_SAVE_JSON", "1"):
+        return
+    label = args.defense_type or (f"{args.workflow_mode}_baseline")
+    agent = res["agent_name"].split('/')[-1]
+    task_text = next((m.get("content", "") for m in res["messages"] if m.get("role") == "user"), "")
+    base = os.path.dirname(args.res_file) or "logs"
+    out_dir = os.path.join(base, "json", _slug(args.llm_name), _slug(label), agent)
+    os.makedirs(out_dir, exist_ok=True)
+    fname = f"{_slug(res['attacker_tool'])}__{_slug(task_text, 30)}.json"
+    payload = {
+        "model": args.llm_name,
+        "injection_method": "observation_prompt_injection",
+        "attack_type": args.attack_type,
+        "workflow_mode": args.workflow_mode,
+        "defense_type": args.defense_type,
+        "agent_name": res["agent_name"],
+        "task": task_text,
+        "attacker_tool": res["attacker_tool"],
+        "attack_goal": attacker_goal,
+        "aggressive": res.get("agg"),
+        "attack_success": bool(attack_successful),   # ASR numerator
+        "utility": bool(original_successful),        # original-task success
+        "refuse": refuse_res,
+        "messages": res["messages"],
+    }
+    try:
+        with open(os.path.join(out_dir, fname), "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
+    except Exception as e:
+        print(f"[json log] failed to write {fname}: {e}")
+
 
 def main():
     seed_everything(0)
@@ -264,7 +308,9 @@ def main():
         attack_tool = res["attacker_tool"]
         print(f"Attack Tool: {attack_tool}")
 
-        task = res["messages"][3]['content']
+        # The plan-then-execute layout put the task at messages[3]; ReAct puts it at messages[1].
+        # Find it by role so neither mode (nor a short trajectory) crashes here.
+        task = next((m.get("content", "") for m in res["messages"] if m.get("role") == "user"), "")
         memory_found_flag = None
 
         if args.read_db:
@@ -297,6 +343,8 @@ def main():
 
         print("**********************************")
 
+        # AgentDojo-style per-task JSON trace (full messages + metrics + metadata).
+        _dump_task_json(args, res, attacker_goal, attack_successful, original_successful, refuse_res)
 
         # 保存结果到 CSV
         with open(args.res_file, mode='a', newline='') as file:
