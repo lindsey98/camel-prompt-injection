@@ -153,6 +153,7 @@ def _dump_task_json(args, res, attacker_goal, attack_successful, original_succes
         "attack_success": bool(attack_successful),   # ASR numerator
         "utility": bool(original_successful),        # original-task success
         "refuse": refuse_res,
+        "tool_trace": res.get("tool_trace"),         # per-call: tool / observation / injection / is_attacker
         "messages": res["messages"],
     }
     try:
