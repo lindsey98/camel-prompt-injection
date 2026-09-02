@@ -19,6 +19,10 @@ TASK_NUM="${TASK_NUM:-1}"
 export no_proxy="localhost,127.0.0.1,0.0.0.0${no_proxy:+,$no_proxy}"
 export NO_PROXY="$no_proxy"
 
+# Run the refuse judge through the local model too (no OpenAI / external network needed).
+# Set ASB_JUDGE_MODEL="" before calling to force the OpenAI gpt-4o-mini judge instead.
+export ASB_JUDGE_MODEL="${ASB_JUDGE_MODEL-$MODEL}"
+
 # ASB runs with cwd=asb (so aios/, pyopenagi/, camel_adapter/, data/ resolve). Also put the repo
 # root on PYTHONPATH so the CaMeL kernel (src.camel) imports for the CaMeL defense.
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
