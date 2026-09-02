@@ -124,38 +124,103 @@ def _slug(s, n=40):
     return (re.sub(r'[^A-Za-z0-9._-]+', '_', str(s))[:n].strip('_')) or 'x'
 
 
-def _dump_task_json(args, res, attacker_goal, attack_successful, original_successful, refuse_res):
-    """Write one AgentDojo-style per-task JSON trace (messages + metrics + metadata).
+def _text_block(s):
+    return [{"type": "text", "content": "" if s is None else str(s)}]
 
-    Layout mirrors AgentDojo's nesting: logs/json/<model>/<label>/<agent>/<attacker>__<task>.json
-    where <label> is the defense (or the baseline workflow mode). Disable with ASB_SAVE_JSON="".
+
+def _to_agentdojo_messages(messages):
+    """Convert ASB's internal messages to AgentDojo's message schema.
+
+    system/user  -> content as [{type:text, content}] blocks.
+    assistant w/ tool_calls -> content blocks (or null) + tool_calls [{function, args, id, placeholder_args}].
+    tool         -> content blocks + tool_call_id + the referenced tool_call + error.
+    assistant final -> content blocks + tool_calls: [].
+    """
+    out, id2call = [], {}
+    for m in messages:
+        role = m.get("role")
+        if role in ("system", "user"):
+            out.append({"role": role, "content": _text_block(m.get("content"))})
+        elif role == "assistant" and m.get("tool_calls"):
+            tcs = []
+            for tc in m["tool_calls"]:
+                fn = tc.get("function", {})
+                try:
+                    a = json.loads(fn.get("arguments") or "{}")
+                except Exception:
+                    a = {}
+                call = {"function": fn.get("name"), "args": a, "id": tc.get("id"), "placeholder_args": None}
+                tcs.append(call)
+                id2call[tc.get("id")] = call
+            out.append({
+                "role": "assistant",
+                "content": _text_block(m["content"]) if m.get("content") else None,
+                "tool_calls": tcs,
+            })
+        elif role == "tool":
+            cid = m.get("tool_call_id")
+            out.append({
+                "role": "tool",
+                "content": _text_block(m.get("content")),
+                "tool_call_id": cid,
+                "tool_call": id2call.get(cid),
+                "error": None,
+            })
+        elif role == "assistant":
+            out.append({"role": "assistant", "content": _text_block(m.get("content")), "tool_calls": []})
+    return out
+
+
+def _dump_task_json(args, res, attacker_goal, attack_successful, original_successful, refuse_res):
+    """Write one AgentDojo-format ``TaskResults`` JSON per task.
+
+    Layout: logs/json/<model>/<label>/<agent>/<attacker>__<task>.json (label = defense or baseline
+    workflow mode). Disable with ASB_SAVE_JSON="". Internal ASB messages are converted to
+    AgentDojo's schema (tool-role results, structured tool_calls, {type,content} blocks).
     """
     if not os.getenv("ASB_SAVE_JSON", "1"):
         return
     label = args.defense_type or (f"{args.workflow_mode}_baseline")
     agent = res["agent_name"].split('/')[-1]
     task_text = next((m.get("content", "") for m in res["messages"] if m.get("role") == "user"), "")
+    injections = {}
+    for t in (res.get("tool_trace") or []):
+        if t.get("injection"):
+            injections[res["attacker_tool"]] = t["injection"]
+            break
+    pipeline_name = args.llm_name + (f"+{args.defense_type}" if args.defense_type else "")
+    payload = {
+        # --- AgentDojo TaskResults schema ---
+        "suite_name": agent,
+        "pipeline_name": pipeline_name,
+        "user_task_id": _slug(task_text, 60),
+        "injection_task_id": res["attacker_tool"] if args.observation_prompt_injection else None,
+        "attack_type": args.attack_type,
+        "injections": injections,
+        "messages": _to_agentdojo_messages(res["messages"]),
+        "error": None,
+        "benchmark_version": None,
+        "evaluation_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "agentdojo_package_version": None,
+        "utility": bool(original_successful),
+        "security": bool(attack_successful),   # AgentDojo convention: security_results == ASR
+        "duration": None,
+        # --- ASB extras (kept for convenience / disambiguation) ---
+        "injection_method": "observation_prompt_injection",
+        "workflow_mode": args.workflow_mode,
+        "defense_type": args.defense_type,
+        "attack_success": bool(attack_successful),
+        "refuse": refuse_res,
+        "attacker_tool": res["attacker_tool"],
+        "attack_goal": attacker_goal,
+        "aggressive": res.get("agg"),
+        "task": task_text,
+        "tool_trace": res.get("tool_trace"),
+    }
     base = os.path.dirname(args.res_file) or "logs"
     out_dir = os.path.join(base, "json", _slug(args.llm_name), _slug(label), agent)
     os.makedirs(out_dir, exist_ok=True)
     fname = f"{_slug(res['attacker_tool'])}__{_slug(task_text, 30)}.json"
-    payload = {
-        "model": args.llm_name,
-        "injection_method": "observation_prompt_injection",
-        "attack_type": args.attack_type,
-        "workflow_mode": args.workflow_mode,
-        "defense_type": args.defense_type,
-        "agent_name": res["agent_name"],
-        "task": task_text,
-        "attacker_tool": res["attacker_tool"],
-        "attack_goal": attacker_goal,
-        "aggressive": res.get("agg"),
-        "attack_success": bool(attack_successful),   # ASR numerator
-        "utility": bool(original_successful),        # original-task success
-        "refuse": refuse_res,
-        "tool_trace": res.get("tool_trace"),         # per-call: tool / observation / injection / is_attacker
-        "messages": res["messages"],
-    }
     try:
         with open(os.path.join(out_dir, fname), "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
@@ -331,8 +396,11 @@ def main():
                 print("The memory search did NOT find attacker tool history successfully.")
                 memory_found_flag = False
 
-        filtered_messages = [msg for msg in res["messages"] if "[Thinking]" in str(msg) or "'thinking'" in str(msg)]
-        refuse_res = judge_response(str(filtered_messages)) if len(filtered_messages) > 1 else '1'
+        # The model's final natural-language answer: the last assistant message with plain-string
+        # content and no tool_calls (react drops the old [Thinking] tag; automatic still has it).
+        final_texts = [m.get("content") for m in res["messages"]
+                       if m.get("role") == "assistant" and isinstance(m.get("content"), str) and not m.get("tool_calls")]
+        refuse_res = judge_response(str(final_texts[-1])) if final_texts else '1'
 
         if refuse_res == '0':
             print("The model response doesn't comply with the user request.")

@@ -528,17 +528,31 @@ class ReactAgentAttack(BaseAgent):
             tool_calls = response.tool_calls
             if tool_calls:
                 final_stage = (turn == max_turns - 1)
+                # Proper OpenAI-style assistant tool-call message, fed back to the model (not a
+                # bundled [Action]/[Observation] string). This is a real tool-calling turn.
+                oai_tool_calls = [
+                    {"id": f"call_{turn}_{j}", "type": "function",
+                     "function": {"name": tc.get("name"), "arguments": json.dumps(tc.get("parameters") or {})}}
+                    for j, tc in enumerate(tool_calls)
+                ]
+                self.messages.append({
+                    "role": "assistant",
+                    "content": response.response_message or None,
+                    "tool_calls": oai_tool_calls,
+                })
                 actions, observations, success = self.call_tools(tool_calls, final_stage=final_stage)
                 self._record_tool_trace(tool_calls, observations)
-                msg = "[Action]: " + ";".join(actions) + "; [Observation]: " + ";".join(observations)
-                self.messages.append({"role": "assistant", "content": msg})
-                final_result = self.messages[-1]
+                # Proper tool-role result messages -- the OPI injection lands here, like AgentDojo.
+                for j in range(len(oai_tool_calls)):
+                    obs = observations[j] if j < len(observations) else "No result."
+                    self.messages.append({"role": "tool", "tool_call_id": f"call_{turn}_{j}", "content": obs})
+                final_result = observations[-1] if observations else ""
                 if success:
                     self.tool_call_success = True
             else:
-                # No tool call -> the model is done (or refusing).
+                # No tool call -> the model is done (or refusing). Plain assistant answer.
                 final_result = response.response_message
-                self.messages.append({"role": "assistant", "content": f"[Thinking]: {response.response_message}"})
+                self.messages.append({"role": "assistant", "content": response.response_message})
                 self.rounds += 1
                 break
 
