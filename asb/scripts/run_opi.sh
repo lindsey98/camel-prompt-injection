@@ -22,8 +22,10 @@ CLEAN="${CLEAN:-}"
 # Concurrent tasks. ASB's original 5000 exhausts file descriptors and overloads the LLM server;
 # keep it modest and match it to what your SGLang endpoint can handle.
 MAX_WORKERS="${MAX_WORKERS:-16}"
-# Where the per-task JSON traces go. Default: <res_file dir>/json (logs/observation_prompt_injection/json).
-LOG_DIR="${LOG_DIR:-}"
+# Where the per-task JSON traces go. Top dir encodes the run: <model>_nodefense or <model>+<defense>,
+# e.g. logs/Qwen3.6-35B-A3B_nodefense/... and logs/Qwen3.6-35B-A3B+camel/...
+if [ -n "$DEFENSE" ]; then _PIPE="${MODEL}+${DEFENSE}"; else _PIPE="${MODEL}_nodefense"; fi
+LOG_DIR="${LOG_DIR:-logs/$_PIPE}"
 # Reasoning models (Qwen3 with --reasoning-parser) spend tokens on <think> before the tool call;
 # ASB's default 256 truncates them. Bump the generation budget.
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-2048}"
