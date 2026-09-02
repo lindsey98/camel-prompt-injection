@@ -172,9 +172,17 @@ def _to_agentdojo_messages(messages):
     return out
 
 
+def _run_label(args):
+    """Trace sub-directory: the defense, or the (attacked) baseline / clean (no-attack) run."""
+    if args.defense_type:
+        return args.defense_type
+    suffix = "clean" if getattr(args, "clean", False) else "baseline"
+    return f"{args.workflow_mode}_{suffix}"
+
+
 def _task_json_path(args, agent_short, task_text, attacker_tool):
     """Deterministic per-task trace path, shared by the resume-skip check and the JSON dump."""
-    label = args.defense_type or (f"{args.workflow_mode}_baseline")
+    label = _run_label(args)
     base = os.path.dirname(args.res_file) or "logs"
     out_dir = os.path.join(base, "json", _slug(args.llm_name), _slug(label), agent_short)
     fname = f"{_slug(attacker_tool)}__{_slug(task_text, 30)}.json"
@@ -308,6 +316,9 @@ def main():
         agent_path = agent_info["agent_path"]
         tasks = agent_info["tasks"]
         attacker_tools = attacker_tools_all[attacker_tools_all["Corresponding Agent"] == agent_name]
+        if args.clean:
+            # No attack: the attacker tool is irrelevant, so run each task once (not once per tool).
+            attacker_tools = attacker_tools.head(1)
 
         for i, task in enumerate(tasks): # iterate over each task
             if i >= args.task_num:
