@@ -115,6 +115,10 @@ class CaMeLDefense:
             security_policy_engine=make_asb_policy_engine_cls(benign_names),
             quarantined_llm_model=_make_qllm_model(self.model_name),
             eval_mode=interpreter.MetadataEvalMode.NORMAL,
+            # A denied (attacker) tool call is fed back to the retry loop instead of aborting, so the
+            # model re-plans with the allowed tools and the benign task can still complete (utility
+            # survives) while the attacker tool stays blocked (ASR = 0).
+            deny_as_error=True,
         )
 
         try:
