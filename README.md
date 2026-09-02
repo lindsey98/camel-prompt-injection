@@ -121,36 +121,6 @@ Notes:
 - Open models retry more (weaker structured output / Python). `CAMEL_DEBUG_QLLM=1`
   prints the quarantined-LLM input/output for debugging.
 
-## ASB Observation Prompt Injection (OPI)
-
-Besides AgentDojo, the repo vendors the **Observation Prompt Injection** slice of
-[ASB](https://github.com/agiresearch/ASB) under `asb/`, with **CaMeL wired in as a defense**
-(`defense_type: camel`). ASB is its own agent framework (AIOS + `pyopenagi`), not AgentDojo; OPI
-appends an attacker instruction to a tool's observation, and success (ASR) means the attacker's
-goal appears in the trajectory (RR = the benign task still succeeds).
-
-Setup (on top of the CaMeL env, pointed at the same local vLLM endpoint):
-
-```bash
-pip install -r asb/requirements-opi.txt
-export LOCAL_BASE_URL=http://localhost:8000/v1 LOCAL_API_KEY=EMPTY
-cd asb
-bash scripts/run_opi.sh          # undefended baseline — confirm ASR > 0 first
-bash scripts/run_opi.sh camel    # CaMeL defense — expect ASR to drop
-python scripts/res_retrieval.py  # aggregate ASR/RR from logs/
-```
-
-How CaMeL defends here (`asb/camel_adapter/`): the adapter drives the **real** `PrivilegedLLM`
-pipeline over ASB's tools — same code-gen **retry loop**, **quarantined LLM** (`query_ai_assistant`),
-`default_system_prompt_generator`, and untrusted output tagging via CaMeL's own `AgentDojoFunction`
-(so CaMeL's utility is not understated). ASB tools are wrapped as AgentDojo `Function`s (benign ones
-carry the untrusted OPI injection in their observation); the attacker tool is registered — hence
-advertised, exactly like the ASB baseline — but an `ASBSecurityPolicyEngine` default-deny allowlist
-denies it. Because ASB tools are parameterless, the defense leans on trusted-task code-gen plus the
-allowlist rather than argument-level taint, so treat the ASR/RR numbers as something to **validate
-empirically** per model. The vendored slice omits ASB's DPI/MP/PoT and memory-DB paths; heavy deps
-(torch/transformers/langchain) are import-guarded.
-
 ## FAQ
 
 **Add a model:** add it to `_supported_model_names` in [`models.py`](src/camel/models.py)

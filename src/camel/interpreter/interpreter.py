@@ -140,9 +140,6 @@ class EvalArgs:
     """The list of security policies to apply."""
     eval_mode: MetadataEvalMode
     """The evaluation mode, either `STRICT` or `NORMAL`."""
-    deny_as_error: bool = False
-    """If True, a policy denial becomes a recoverable interpreter error (fed back to the code-gen
-    model to retry) instead of aborting the whole run. Default False keeps the AgentDojo behavior."""
 
 
 def _eval_formatted_value(
@@ -2121,19 +2118,9 @@ def _eval_call(
     if not isinstance(evaled_fn, value.CaMeLBuiltin | value.CaMeLFunction | value.CaMeLClass) and isinstance(
         policy_check_result, security_policy.Denied
     ):
-        denied_error = security_policy.SecurityPolicyDeniedError(
+        raise security_policy.SecurityPolicyDeniedError(
             f"Execution of tool '{evaled_fn.name().raw}' denied: {policy_check_result.reason}"
         )
-        if eval_args.deny_as_error:
-            # Recoverable: surface the denial to the retry loop so the model re-plans with the
-            # allowed tools instead of the whole program aborting (used by the ASB adapter).
-            return EvalResult(
-                result.Error(CaMeLException(denied_error, (node,), (evaled_fn,))),
-                namespace,
-                tool_calls_chain,
-                dependencies,
-            )
-        raise denied_error
 
     if evaled_fn.name().raw == "query_ai_assistant" and eval_args.eval_mode == MetadataEvalMode.STRICT:
         dependencies = [*dependencies, *evaled_args._python_value, *evaled_kwargs._python_value.values()]

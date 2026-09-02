@@ -250,7 +250,6 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
         eval_mode: interpreter.MetadataEvalMode = interpreter.MetadataEvalMode.NORMAL,
         quarantined_llm_retries: int = 10,
         max_attempts: int = 10,
-        deny_as_error: bool = False,
     ) -> None:
         """Initializes the PrivilegedLLM."""
         self.llm = llm
@@ -260,8 +259,6 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
         self.quarantined_llm_retries = quarantined_llm_retries
         self.dummy_runtime = functions_runtime.FunctionsRuntime()
         self.max_attempts = max_attempts
-        # If True, a policy denial is fed back to the retry loop instead of aborting (ASB adapter).
-        self.deny_as_error = deny_as_error
         # Gemini thinking and o1-* do not support JSON mode, so we fall back to base base Gemini/4o
         self.quarantined_llm_model: KnownModelName = _get_quarantined_llm(quarantined_llm_model)
 
@@ -291,7 +288,7 @@ class PrivilegedLLM(agent_pipeline.BasePipelineElement):
             and an optional Exception if one occurred during interpretation.
         """
 
-        eval_args = interpreter.EvalArgs(self.security_policy_engine(env), self.eval_mode, self.deny_as_error)
+        eval_args = interpreter.EvalArgs(self.security_policy_engine(env), self.eval_mode)
 
         # print(code)
 
