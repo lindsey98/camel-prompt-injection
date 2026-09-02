@@ -19,8 +19,14 @@ TASK_NUM="${TASK_NUM:-1}"
 export no_proxy="localhost,127.0.0.1,0.0.0.0${no_proxy:+,$no_proxy}"
 export NO_PROXY="$no_proxy"
 
-# Run the refuse judge through the local model too (no OpenAI / external network needed).
-# Set ASB_JUDGE_MODEL="" before calling to force the OpenAI gpt-4o-mini judge instead.
+# Refuse judge. Defaults to the same (agent) model/endpoint so no OpenAI is needed. The judge
+# endpoint is INDEPENDENT of the agent: to keep the agent on your local vLLM but judge with a
+# hosted model, export before calling e.g.:
+#   export ASB_JUDGE_MODEL=glm-5.2
+#   export ASB_JUDGE_BASE_URL=https://api.modelarts-maas.com/openai/v1
+#   export ASB_JUDGE_API_KEY=<key>
+# (agent still uses LOCAL_BASE_URL/LOCAL_API_KEY, i.e. localhost:8000 by default.)
+# Set ASB_JUDGE_MODEL="" to force the OpenAI gpt-4o-mini judge instead.
 export ASB_JUDGE_MODEL="${ASB_JUDGE_MODEL-$MODEL}"
 
 # ASB runs with cwd=asb (so aios/, pyopenagi/, camel_adapter/, data/ resolve). Also put the repo

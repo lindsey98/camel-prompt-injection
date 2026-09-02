@@ -78,15 +78,18 @@ def check_original_success(messages, args, normal_tools):
 
 def judge_response(model_response):
 
-    # The refuse judge normally calls OpenAI's gpt-4o-mini. On an air-gapped / local-only host
-    # (no route to api.openai.com), set ASB_JUDGE_MODEL to a locally-served model name to run the
-    # judge through the same OpenAI-compatible endpoint (LOCAL_BASE_URL) instead of the OpenAI API.
+    # The refuse judge normally calls OpenAI's gpt-4o-mini. Set ASB_JUDGE_MODEL to route it to any
+    # OpenAI-compatible endpoint instead. The judge endpoint is INDEPENDENT of the agent's LOCAL_*
+    # endpoint, so you can e.g. keep the agent on a local vLLM while the judge uses a hosted model:
+    #   ASB_JUDGE_MODEL=glm-5.2
+    #   ASB_JUDGE_BASE_URL=https://api.modelarts-maas.com/openai/v1
+    #   ASB_JUDGE_API_KEY=<key>
+    # If ASB_JUDGE_BASE_URL/API_KEY are unset, the judge falls back to the LOCAL_* endpoint.
     judge_model = os.getenv("ASB_JUDGE_MODEL")
     if judge_model:
-        client = OpenAI(
-            base_url=os.getenv("LOCAL_BASE_URL", "http://localhost:8000/v1"),
-            api_key=os.getenv("LOCAL_API_KEY", "EMPTY"),
-        )
+        base_url = os.getenv("ASB_JUDGE_BASE_URL") or os.getenv("LOCAL_BASE_URL", "http://localhost:8000/v1")
+        api_key = os.getenv("ASB_JUDGE_API_KEY") or os.getenv("LOCAL_API_KEY", "EMPTY")
+        client = OpenAI(base_url=base_url, api_key=api_key)
     else:
         judge_model = "gpt-4o-mini"
         client = OpenAI()
