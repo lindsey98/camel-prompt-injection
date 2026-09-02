@@ -14,6 +14,9 @@ MODEL="${MODEL:-Qwen3.6-35B-A3B}"      # must match the vLLM --served-model-name
 ATTACK_TYPE="${ATTACK_TYPE:-context_ignoring}"
 ATTACKER_TOOLS="${ATTACKER_TOOLS:-data/attack_tools_test.jsonl}"  # small slice for a smoke test
 TASK_NUM="${TASK_NUM:-5}"
+# automatic = model plans itself (use this for real results); manual = use each agent's hardcoded
+# plan (diagnostic: removes the planning variable, only affects the baseline, not CaMeL).
+WORKFLOW_MODE="${WORKFLOW_MODE:-automatic}"
 # Reasoning models (Qwen3 with --reasoning-parser) spend tokens on <think> before the tool call;
 # ASB's default 256 truncates them. Bump the generation budget.
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-2048}"
@@ -55,6 +58,7 @@ python main_attacker.py \
   --attack_type "$ATTACK_TYPE" \
   --attacker_tools_path "$ATTACKER_TOOLS" \
   --task_num "$TASK_NUM" \
+  --workflow_mode "$WORKFLOW_MODE" \
   --max_new_tokens "$MAX_NEW_TOKENS" \
   --database /nonexistent_no_memory_db \
   --res_file "$RES" \
