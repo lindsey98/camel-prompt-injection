@@ -13,12 +13,14 @@
 # limitations under the License.
 
 from pathlib import Path
+from typing import Annotated
 
 import cyclopts
 from agentdojo import attacks, benchmark, logging
 from agentdojo.task_suite import get_suite
 from openai.types.chat import ChatCompletionReasoningEffort
 
+import src.camel.attacks  # noqa  -- registers custom attacks (e.g. ChatInject) with AgentDojo
 import src.camel.custom_yaml  # noqa
 from src.camel.interpreter.interpreter import MetadataEvalMode
 from src.camel.models import make_tools_pipeline
@@ -31,12 +33,13 @@ def main(
     thinking_budget_tokens: int | None = None,
     ad_defense: str | None = None,
     run_attack: bool = False,
+    attack: str = "important_instructions",
     replay_with_policies: bool = False,
     force_rerun: bool = False,
-    suites: list[str] | None = None,
+    suites: Annotated[list[str] | None, cyclopts.Parameter(consume_multiple=True)] = None,
     eval_mode: MetadataEvalMode = MetadataEvalMode.NORMAL,
     q_llm: str | None = None,
-    user_tasks: list[str] | None = None,
+    user_tasks: Annotated[list[str] | None, cyclopts.Parameter(consume_multiple=True)] = None,
 ):
     """Example usage of the defense.
 
@@ -50,16 +53,24 @@ def main(
         thinking_budget_tokens: how many tokens Anthropic reasoning models can use. Note that Anthropic reasoning models are not supported yet.
         ad_defense: whether to use a defense from AgentDojo and which one. It must be used in conjunction with `--use-original`.
             Tested defenses are "tool_filter", "repeat_user_prompt", "spotlight_with_delimiting"
-        run_attack: whether to run the attack (it uses AgentDojo's `important_instructions` attack)
+        run_attack: whether to run the attack (uses the attack named by `--attack`, defaulting to AgentDojo's
+            `important_instructions`).
+        attack: which registered attack to use when `--run-attack` is set. Any attack in AgentDojo's registry is
+            accepted (e.g. "important_instructions", "ignore_previous", "tool_knowledge", "direct", "dos"), plus
+            the bundled ChatInject attacks: "chat_inject_qwen3", "chat_inject_glm", and their multi-turn variants
+            "chat_inject_{qwen3,glm}_with_utility_system_multiturn_7" and
+            "chat_inject_{qwen3,glm}_with_utility_authority_endorsement_system_multiturn_7". Pick the template
+            (qwen3/glm) that matches your target model.
         force_rerun: re-run tasks even if a cached result/trace already exists (otherwise finished tasks are skipped).
         replay_with_policies: replay the run with the given model enforcing security policies. Note that the equivalent run (with same model and attack config)
             should have already been run.
-        suites: which suites to run AgentDojo on (can be a list from `["workspace", "banking", "travel", "slack"]`)
+        suites: which suites to run AgentDojo on (can be a list from `["workspace", "banking", "travel", "slack"]`;
+            with the AgentDyn fork of agentdojo installed, `["shopping", "github", "dailylife"]` are also available)
         eval_mode: which eval mode to use when propagating dependencies.
         q_llm: what model to use as a quarantined llm. If None, the same as `model` is used.
     """
 
-    attack_name = "important_instructions"
+    attack_name = attack
 
     suites = suites or ["workspace", "banking", "travel", "slack"]
     total_utility_results = []

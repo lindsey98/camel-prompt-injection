@@ -17,7 +17,7 @@ import enum
 import pydantic
 from agentdojo import functions_runtime
 
-from camel import system_prompt_generator
+from src.camel import system_prompt_generator
 
 
 def test_function_to_python_definition():

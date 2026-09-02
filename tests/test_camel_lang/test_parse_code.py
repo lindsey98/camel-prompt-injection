@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from camel.interpreter.interpreter import extract_code_block
+from src.camel.interpreter.interpreter import extract_code_block
 
 
 def test_extract_fenced_with_language():

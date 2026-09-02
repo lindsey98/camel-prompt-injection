@@ -19,6 +19,13 @@ from typing import TypeVar
 import pydantic_ai
 from pydantic import BaseModel, Field, create_model
 from pydantic_ai import models
+from pydantic_ai.settings import ModelSettings
+
+# Output-token cap for the quarantined LLM. Some providers (notably local vLLM) default to a very
+# small max_tokens, which makes pydantic-ai raise "Model token limit ... exceeded before any
+# response was generated" and fail the task. Set a generous default (overridable) so the q-LLM can
+# actually answer; this avoids *unfairly* scoring CaMeL tasks as failures due to a low output cap.
+_QLLM_MAX_TOKENS = int(os.getenv("CAMEL_QLLM_MAX_TOKENS", "4096"))
 
 _T = TypeVar("_T")
 # 是 Python 类型系统里的泛型变量，表示"某个具体类型，但现在还不确定是哪个"
@@ -96,7 +103,13 @@ def query_quarantined_llm(
                 output=(output_schema, Field(description="The requested value")),
                 have_enough_information=enough_information,
             )
-        model = pydantic_ai.Agent(llm, output_type=output_model, retries=retries, system_prompt=_SYSTEM_PROMPT)
+        model = pydantic_ai.Agent(
+            llm,
+            output_type=output_model,
+            retries=retries,
+            system_prompt=_SYSTEM_PROMPT,
+            model_settings=ModelSettings(max_tokens=_QLLM_MAX_TOKENS),
+        )
     except RecursionError as e:
         # A self-referential / very deeply nested output_schema makes pydantic recurse
         # forever while building the JSON schema. Turn it into a recoverable error so the

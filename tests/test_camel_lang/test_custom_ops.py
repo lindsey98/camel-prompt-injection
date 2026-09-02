@@ -15,9 +15,9 @@
 import ast
 from datetime import datetime, timedelta
 
-from camel.interpreter import interpreter, result
-from camel.interpreter import namespace as ns
-from camel.security_policy import NoSecurityPolicyEngine
+from src.camel.interpreter import interpreter, result
+from src.camel.interpreter import namespace as ns
+from src.camel.security_policy import NoSecurityPolicyEngine
 
 
 def test_datetime_ops():

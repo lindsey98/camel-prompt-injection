@@ -14,11 +14,13 @@
 
 import dataclasses
 import inspect
+import warnings
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, TypeAlias, TypeVar
 
 import pydantic
+import pydantic_ai
 import yaml
 from agentdojo import attacks, functions_runtime
 from agentdojo import types as ad_types
@@ -42,6 +44,9 @@ from src.camel.pipeline_elements.privileged_llm import (
 )
 from src.camel.pipeline_elements.security_policies.agentdojo_security_policies import (
     AgentDojoSecurityPolicyEngine,
+)
+from src.camel.pipeline_elements.security_policies.agentdyn import (
+    AGENTDYN_DATETIME_ENVIRONMENTS,
 )
 from src.camel.security_policy import NoSecurityPolicyEngine, SecurityPolicyDeniedError
 
@@ -169,7 +174,7 @@ def replay_task(
             "NaiveDatetime",
             "timezone",
         }
-        if not isinstance(env, WorkspaceEnvironment | TravelEnvironment)
+        if not isinstance(env, (WorkspaceEnvironment, TravelEnvironment, *AGENTDYN_DATETIME_ENVIRONMENTS))
         else set()
     )
 
@@ -202,6 +207,22 @@ def replay_task(
                 tool_calls=None,
             )
             return [*messages, error_message, assistant_message], env
+        except pydantic_ai.UnexpectedModelBehavior as e:
+            # Token-limit overflow (e.g. the quarantined LLM): fail this task gracefully instead of
+            # crashing the replay. It is scored as a utility failure.
+            if "token limit" not in str(e).lower():
+                raise
+            warnings.warn(f"Skipping replay task: model token limit exceeded ({e}).")
+            assistant_message = ad_types.ChatAssistantMessage(
+                role="assistant",
+                content=[
+                    ad_types.text_content_block_from_string(
+                        f"{printed_output}\nThe task was aborted because the model's token limit was exceeded."
+                    )
+                ],
+                tool_calls=None,
+            )
+            return [*messages, assistant_message], env
         turn_tool_calls = make_ad_tool_calls(tool_calls_chain)
         tool_call_messages = []
         tool_calls = []

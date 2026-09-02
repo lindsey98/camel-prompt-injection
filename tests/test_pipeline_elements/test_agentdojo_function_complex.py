@@ -17,10 +17,10 @@ import ast
 from agentdojo import functions_runtime, task_suite
 from agentdojo.default_suites.v1.tools import email_client
 
-from camel import security_policy
-from camel.interpreter import interpreter, result
-from camel.interpreter import namespace as ns
-from camel.pipeline_elements import agentdojo_function
+from src.camel import security_policy
+from src.camel.interpreter import interpreter, result
+from src.camel.interpreter import namespace as ns
+from src.camel.pipeline_elements import agentdojo_function
 
 
 def test_send_email():

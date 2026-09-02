@@ -15,10 +15,10 @@
 import ast
 from typing import ClassVar
 
-from camel.capabilities import Capabilities
-from camel.interpreter import interpreter, result, value
-from camel.interpreter import namespace as ns
-from camel.security_policy import NoSecurityPolicyEngine
+from src.camel.capabilities import Capabilities
+from src.camel.interpreter import interpreter, result, value
+from src.camel.interpreter import namespace as ns
+from src.camel.security_policy import NoSecurityPolicyEngine
 
 
 def pytest_generate_tests(metafunc):
