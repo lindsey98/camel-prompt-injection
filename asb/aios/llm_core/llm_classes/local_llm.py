@@ -54,10 +54,26 @@ class LocalLLM(BaseLLM):
             return parsed_tool_calls
         return None
 
+    @staticmethod
+    def _coalesce_system_messages(messages):
+        """Merge every ``system`` message into a single one at the front.
+
+        ASB appends two system messages (agent description + plan instructions); GPT tolerates
+        that, but stricter local chat templates (e.g. Qwen) reject it with
+        ``400 "System message must be at the beginning."``. Concatenating them into one leading
+        system message keeps the same content while satisfying the template.
+        """
+        system_parts = [m.get("content", "") for m in messages if m.get("role") == "system"]
+        if len(system_parts) <= 1:
+            return messages
+        others = [m for m in messages if m.get("role") != "system"]
+        merged = {"role": "system", "content": "\n\n".join(p for p in system_parts if p)}
+        return [merged, *others]
+
     def process(self, agent_process, temperature=0.0):
         agent_process.set_status("executing")
         agent_process.set_start_time(time.time())
-        messages = agent_process.query.messages
+        messages = self._coalesce_system_messages(agent_process.query.messages)
         self.logger.log(
             f"{agent_process.agent_name} is switched to executing.\n",
             level="executing",
