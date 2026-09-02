@@ -19,6 +19,9 @@ FORCE_RERUN="${FORCE_RERUN:-}"
 # CLEAN=1 runs with NO attack (no OPI injection, no attacker tool) to measure the clean-utility
 # ceiling. Traces go to a separate <workflow>_clean label, and each task runs once (not per tool).
 CLEAN="${CLEAN:-}"
+# Concurrent tasks. ASB's original 5000 exhausts file descriptors and overloads the LLM server;
+# keep it modest and match it to what your SGLang endpoint can handle.
+MAX_WORKERS="${MAX_WORKERS:-16}"
 # Reasoning models (Qwen3 with --reasoning-parser) spend tokens on <think> before the tool call;
 # ASB's default 256 truncates them. Bump the generation budget.
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-2048}"
@@ -69,6 +72,7 @@ python main_attacker.py \
   --workflow_mode "$WORKFLOW_MODE" \
   --react_max_turns "$REACT_MAX_TURNS" \
   --opi_inject_limit "$OPI_INJECT_LIMIT" \
+  --max_workers "$MAX_WORKERS" \
   --max_new_tokens "$MAX_NEW_TOKENS" \
   --database /nonexistent_no_memory_db \
   --res_file "$RES" \
