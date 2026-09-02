@@ -15,8 +15,11 @@ ATTACK_TYPE="${ATTACK_TYPE:-context_ignoring}"
 ATTACKER_TOOLS="${ATTACKER_TOOLS:-data/attack_tools_test.jsonl}"  # small slice for a smoke test
 TASK_NUM="${TASK_NUM:-5}"
 # automatic = model plans itself (use this for real results); manual = use each agent's hardcoded
-# plan (diagnostic: removes the planning variable, only affects the baseline, not CaMeL).
+# plan (diagnostic: removes the planning variable, only affects the baseline, not CaMeL);
+# react = dynamic tool-calling loop (full OPI attack surface). Each ASB agent has only 2 normal
+# tools, so ~4 turns suffice; REACT_MAX_TURNS lets you raise the cap if a task ever hits it.
 WORKFLOW_MODE="${WORKFLOW_MODE:-automatic}"
+REACT_MAX_TURNS="${REACT_MAX_TURNS:-6}"
 # Reasoning models (Qwen3 with --reasoning-parser) spend tokens on <think> before the tool call;
 # ASB's default 256 truncates them. Bump the generation budget.
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-2048}"
@@ -59,6 +62,7 @@ python main_attacker.py \
   --attacker_tools_path "$ATTACKER_TOOLS" \
   --task_num "$TASK_NUM" \
   --workflow_mode "$WORKFLOW_MODE" \
+  --react_max_turns "$REACT_MAX_TURNS" \
   --max_new_tokens "$MAX_NEW_TOKENS" \
   --database /nonexistent_no_memory_db \
   --res_file "$RES" \
