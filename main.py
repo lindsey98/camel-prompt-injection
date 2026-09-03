@@ -60,7 +60,10 @@ def main(
             the bundled ChatInject attacks: "chat_inject_qwen3", "chat_inject_glm", and their multi-turn variants
             "chat_inject_{qwen3,glm}_with_utility_system_multiturn_7" and
             "chat_inject_{qwen3,glm}_with_utility_authority_endorsement_system_multiturn_7". Pick the template
-            (qwen3/glm) that matches your target model.
+            (qwen3/glm) that matches your target model. Also bundled are the Cascade (arXiv:2510.05244,
+            Table 21) second-order semantic-template attacks: "cascade_user_note", "cascade_task_queue",
+            "cascade_safe_tags", "cascade_decoy_safe_tags", "cascade_skip_directive", "cascade_triple_layer",
+            "cascade_decoy_system_update".
         force_rerun: re-run tasks even if a cached result/trace already exists (otherwise finished tasks are skipped).
         replay_with_policies: replay the run with the given model enforcing security policies. Note that the equivalent run (with same model and attack config)
             should have already been run.

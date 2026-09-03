@@ -91,6 +91,24 @@ The multi-turn variants load a **pre-generated per-goal dialogue** from
 travel injection goals only; an uncovered goal (e.g. the AgentDyn suites) raises a
 clear `ValueError`. The template-only variants work on every suite.
 
+Also bundled are the **Cascade** ([arXiv:2510.05244](https://arxiv.org/abs/2510.05244),
+Table 21) "Stage 2" second-order semantic-template attacks — deceptive wrappers that
+drop instruction-like surface forms (several add a high-salience *decoy* to distract
+format-driven defenses while the real payload rides along as trusted metadata):
+
+| `--attack` | Strategy |
+| --- | --- |
+| `cascade_user_note` | Casual user-note framing (`Note from Emma Johnson: …`) |
+| `cascade_task_queue` | Fake `=== Task Queue Status ===` operational formatting |
+| `cascade_safe_tags` | Trusted-looking `<notapromptinjection>` wrapper (provenance cue) |
+| `cascade_decoy_safe_tags` | High-salience `<promptinjection>` decoy + real payload in a safe wrapper |
+| `cascade_skip_directive` | `<hidden_instruction>` + a "skip these tags" directive |
+| `cascade_triple_layer` | decoy + `<notapromptinjection>` + `<hidden_instruction>` combined |
+| `cascade_decoy_system_update` | decoy + urgent `<system_update verified="true">` wrapper |
+
+These work on every suite. Templates are faithful reconstructions of Table 21's
+descriptions (the paper does not publish verbatim strings).
+
 ## Common options
 
 `--reasoning-effort {low,medium,high}` (OpenAI reasoning models only) ·
