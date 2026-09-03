@@ -63,7 +63,9 @@ def main(
             (qwen3/glm) that matches your target model. Also bundled are the Cascade (arXiv:2510.05244,
             Table 21) second-order semantic-template attacks: "cascade_user_note", "cascade_task_queue",
             "cascade_safe_tags", "cascade_decoy_safe_tags", "cascade_skip_directive", "cascade_triple_layer",
-            "cascade_decoy_system_update".
+            "cascade_decoy_system_update", and the Cascade "Stage 3" defense-aware adaptive attack
+            "cascade_adaptive" (closed-loop LLM mutator; runs the target pipeline up to CASCADE_MAX_ROUNDS
+            times per task pair — expensive; configured via CASCADE_* env vars).
         force_rerun: re-run tasks even if a cached result/trace already exists (otherwise finished tasks are skipped).
         replay_with_policies: replay the run with the given model enforcing security policies. Note that the equivalent run (with same model and attack config)
             should have already been run.

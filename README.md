@@ -109,6 +109,27 @@ format-driven defenses while the real payload rides along as trusted metadata):
 These work on every suite. Templates are faithful reconstructions of Table 21's
 descriptions (the paper does not publish verbatim strings).
 
+Also bundled is Cascade's **"Stage 3"** defense-aware **adaptive** attack
+(`--attack cascade_adaptive`): a closed loop where an LLM *mutator* proposes an
+injection, we run it through the **target pipeline** and use the injection task's
+`security()` as the success signal, then feed successes/failures back to the mutator
+for up to `CASCADE_MAX_ROUNDS` rounds (default 10), stopping early on success.
+
+> [!WARNING]
+> This runs the full target pipeline up to `CASCADE_MAX_ROUNDS` times **per
+> (user_task, injection_task) pair** — much more expensive than the fixed attacks.
+
+Config via env: `CASCADE_MAX_ROUNDS` (rounds, default 10), `CASCADE_DEFENSE`
+(defense name shown to the mutator, default `unknown`), `CASCADE_MUTATOR_MODEL`
+(default `gpt-4o-mini`), and `CASCADE_MUTATOR_BASE_URL` / `CASCADE_MUTATOR_API_KEY`
+(fall back to `LOCAL_BASE_URL` / `LOCAL_API_KEY`, then `OPENAI_API_KEY` — so the
+mutator can share a local vLLM endpoint).
+
+```bash
+CASCADE_MAX_ROUNDS=6 CASCADE_DEFENSE=camel \
+  python main.py MODEL --run-attack --attack cascade_adaptive --suites banking
+```
+
 ## Common options
 
 `--reasoning-effort {low,medium,high}` (OpenAI reasoning models only) ·

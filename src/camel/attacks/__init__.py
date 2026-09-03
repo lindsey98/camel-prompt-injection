@@ -15,6 +15,7 @@
 """Custom AgentDojo attacks. Importing this package registers them with AgentDojo's attack registry."""
 
 from src.camel.attacks import cascade  # noqa: F401  -- import for @register_attack side effects
+from src.camel.attacks import cascade_adaptive  # noqa: F401  -- import for @register_attack side effects
 from src.camel.attacks import chat_inject  # noqa: F401  -- import for @register_attack side effects
 
-__all__ = ["cascade", "chat_inject"]
+__all__ = ["cascade", "cascade_adaptive", "chat_inject"]
