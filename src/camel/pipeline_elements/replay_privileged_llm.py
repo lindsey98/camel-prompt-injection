@@ -86,6 +86,26 @@ def _make_quarantined_llm_fn(messages: list[ad_types.ChatToolResultMessage]) -> 
     return query_ai_assistant
 
 
+def _coerce_tool_calls(messages: list[ad_types.ChatMessage]) -> None:
+    """Coerce a loaded trace's ``tool_call`` / ``tool_calls`` from plain dicts to ``FunctionCall``.
+
+    ``TaskResults.model_validate_json`` does not always coerce the nested ``FunctionCall`` inside the
+    ``ChatMessage`` TypedDict union (depends on the agentdojo build / pydantic resolution of the
+    forward ref), so they can load as dicts. The replay reads them as objects (``.function`` /
+    ``.args``), which raises ``AttributeError: 'dict' object has no attribute 'function'``. Normalize
+    in place so downstream access works regardless. Idempotent.
+    """
+    for message in messages:
+        tool_call = message.get("tool_call")
+        if isinstance(tool_call, dict):
+            message["tool_call"] = FunctionCall.model_validate(tool_call)
+        tool_calls = message.get("tool_calls")
+        if tool_calls:
+            message["tool_calls"] = [
+                FunctionCall.model_validate(tc) if isinstance(tc, dict) else tc for tc in tool_calls
+            ]
+
+
 def format_camel_exception(camel_exception: interpreter.CaMeLException, code: str) -> str:
     exception = camel_exception.exception
     node = camel_exception.nodes[-1]
@@ -157,6 +177,7 @@ def replay_task(
     )
 
     execution_trace = TaskResults.model_validate_json(trace_path.read_text())
+    _coerce_tool_calls(execution_trace.messages)
 
     # exclude query message
     relevant_messages = execution_trace.messages[1:]
