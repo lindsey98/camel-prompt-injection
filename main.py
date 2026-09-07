@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging as pylogging  # `logging` below is agentdojo.logging (OutputLogger), not the stdlib
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -76,6 +78,21 @@ def main(
     """
 
     attack_name = attack
+
+    # AgentDojo's OutputLogger emits the per-message chat trace via logging.info(..., markup=True), but it
+    # never installs a console handler -- that normally comes from agentdojo's own CLI. Running the
+    # benchmark functions directly (as here) leaves the root logger at its WARNING-only last-resort
+    # handler, so the whole CaMeL trace is swallowed and you only see stray warnings/prints. Install a
+    # RichHandler at INFO (once) so the trace shows again. Override with CAMEL_LOG_LEVEL=WARNING to quiet.
+    if not pylogging.getLogger().handlers:
+        from rich.logging import RichHandler
+
+        pylogging.basicConfig(
+            level=os.getenv("CAMEL_LOG_LEVEL", "INFO").upper(),
+            format="%(message)s",
+            datefmt="[%X]",
+            handlers=[RichHandler(markup=True, show_path=False, rich_tracebacks=True)],
+        )
 
     suites = suites or ["workspace", "banking", "travel", "slack"]
     total_utility_results = []
