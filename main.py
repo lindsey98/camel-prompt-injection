@@ -37,11 +37,13 @@ def main(
     run_attack: bool = False,
     attack: str = "important_instructions",
     replay_with_policies: bool = False,
-    force_rerun: bool = False,
-    suites: Annotated[list[str] | None, cyclopts.Parameter(consume_multiple=True)] = None,
+    force_rerun: Annotated[bool, cyclopts.Parameter(name=("--force-rerun", "-f"))] = False,
+    html: bool = False,
+    suites: Annotated[list[str] | None, cyclopts.Parameter(name=("--suite", "-s"), consume_multiple=True)] = None,
     eval_mode: MetadataEvalMode = MetadataEvalMode.NORMAL,
     q_llm: str | None = None,
-    user_tasks: Annotated[list[str] | None, cyclopts.Parameter(consume_multiple=True)] = None,
+    user_tasks: Annotated[list[str] | None, cyclopts.Parameter(name=("--user-task", "-ut"), consume_multiple=True)] = None,
+    injection_tasks: Annotated[list[str] | None, cyclopts.Parameter(name=("--injection-task", "-it"), consume_multiple=True)] = None,
 ):
     """Example usage of the defense.
 
@@ -68,13 +70,20 @@ def main(
             "cascade_decoy_system_update", and the Cascade "Stage 3" defense-aware adaptive attack
             "cascade_adaptive" (closed-loop LLM mutator; runs the target pipeline up to CASCADE_MAX_ROUNDS
             times per task pair — expensive; configured via CASCADE_* env vars).
-        force_rerun: re-run tasks even if a cached result/trace already exists (otherwise finished tasks are skipped).
+        force_rerun: (`--force-rerun`/`-f`) re-run tasks even if a cached result/trace already exists
+            (otherwise finished tasks are skipped).
+        html: write a rendered `.html` companion next to every trace JSON (same folder/basename, e.g.
+            `none.json` -> `none.html`) for easy inspection.
         replay_with_policies: replay the run with the given model enforcing security policies. Note that the equivalent run (with same model and attack config)
             should have already been run.
-        suites: which suites to run AgentDojo on (can be a list from `["workspace", "banking", "travel", "slack"]`;
-            with the AgentDyn fork of agentdojo installed, `["shopping", "github", "dailylife"]` are also available)
+        suites: (`--suite`/`-s`) which suites to run AgentDojo on (a list from
+            `["workspace", "banking", "travel", "slack"]`; with the AgentDyn fork of agentdojo installed,
+            `["shopping", "github", "dailylife"]` are also available). Defaults to the original four.
         eval_mode: which eval mode to use when propagating dependencies.
         q_llm: what model to use as a quarantined llm. If None, the same as `model` is used.
+        user_tasks: (`--user-task`/`-ut`) which user tasks to run. If not given, all tasks in the suite run.
+        injection_tasks: (`--injection-task`/`-it`) which injection tasks to run (only with `--run-attack`).
+            If not given, all injection tasks run.
     """
 
     attack_name = attack
@@ -93,6 +102,12 @@ def main(
             datefmt="[%X]",
             handlers=[RichHandler(markup=True, show_path=False, rich_tracebacks=True)],
         )
+
+    if html:
+        # Write an .html companion next to every trace JSON (none.json -> none.html, etc.).
+        from src.camel.trace_html import enable_trace_html
+
+        enable_trace_html()
 
     suites = suites or ["workspace", "banking", "travel", "slack"]
     total_utility_results = []
@@ -122,6 +137,7 @@ def main(
                     logdir,
                     force_rerun=force_rerun,
                     user_tasks=user_tasks,
+                    injection_tasks=injection_tasks,
                 )
             else:
                 results = benchmark.benchmark_suite_without_injections(

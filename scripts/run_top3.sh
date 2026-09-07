@@ -11,10 +11,10 @@
 #   ./scripts/run_top3.sh
 #
 # Optional env override:
-#   SUITES="--suites workspace" ./scripts/run_top3.sh
+#   SUITES="--suite workspace" ./scripts/run_top3.sh
 set -euo pipefail
 
-SUITES="${SUITES:-}"   # e.g. "--suites workspace banking"
+SUITES="${SUITES:-}"   # e.g. "--suite workspace banking"
 
 # model id + per-model flags (top 3 by CaMeL utility)
 MODELS=(

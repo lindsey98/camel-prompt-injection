@@ -31,7 +31,7 @@ pip install -e ./AgentDyn
 Then pass the new suites explicitly, e.g.:
 
 ```bash
-python main.py MODEL --run-attack --suites shopping github dailylife
+python main.py MODEL --run-attack --suite shopping github dailylife
 ```
 
 Models are passed as `provider:model_name`, e.g. `openai:o3-2025-04-16`,
@@ -83,7 +83,7 @@ template that matches your `--model`; the wrong template silently no-ops.
 
 ```bash
 python main.py local:Qwen3.6-35B-A3B --run-attack \
-  --attack chat_inject_qwen3_with_utility_system_multiturn_7 --suites banking slack travel
+  --attack chat_inject_qwen3_with_utility_system_multiturn_7 --suite banking slack travel workspace
 ```
 
 The multi-turn variants load a **pre-generated per-goal dialogue** from
@@ -127,18 +127,20 @@ mutator can share a local vLLM endpoint).
 
 ```bash
 CASCADE_MAX_ROUNDS=6 CASCADE_DEFENSE=camel \
-  python main.py MODEL --run-attack --attack cascade_adaptive --suites banking
+  python main.py MODEL --run-attack --attack cascade_adaptive --suite banking
 ```
 
 ## Common options
 
 `--reasoning-effort {low,medium,high}` (OpenAI reasoning models only) ·
 `--thinking-budget-tokens N` (Anthropic) ·
-`--suites workspace banking travel slack` (plus `shopping github dailylife` with
+`--suite`/`-s` `workspace banking travel slack` (plus `shopping github dailylife` with
 [AgentDyn](#optional-agentdyn-suites) installed) · `--attack NAME` (see
-[Attacks](#attacks)) · `--user-tasks user_task_0 ...` ·
+[Attacks](#attacks)) · `--user-task`/`-ut` `user_task_0 ...` ·
+`--injection-task`/`-it` `injection_task_0 ...` (with `--run-attack`) ·
 `--q-llm provider:model` (cheaper quarantined LLM; single-step only) ·
-`--eval-mode {normal,strict}` · `--force-rerun`.
+`--eval-mode {normal,strict}` · `--force-rerun`/`-f` ·
+`--html` (write an `.html` companion next to every trace JSON).
 Full list: `python main.py --help`.
 
 ## Local / self-hosted models
