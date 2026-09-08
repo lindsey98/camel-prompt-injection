@@ -12,10 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Custom AgentDojo attacks. Importing this package registers them with AgentDojo's attack registry."""
+"""Custom AgentDojo attacks. Importing this package registers them with AgentDojo's attack registry.
+
+ChatInject is intentionally NOT registered here: it now lives in the agentdojo fork
+(https://github.com/lindsey98/agentdojo, `agentdojo.attacks.chat_inject`), which is the up-to-date
+source. Registering a second copy here would silently override the fork's (register_attack just does
+`ATTACKS[name] = attack`), so we defer to the fork.
+"""
 
 from src.camel.attacks import cascade  # noqa: F401  -- import for @register_attack side effects
 from src.camel.attacks import cascade_adaptive  # noqa: F401  -- import for @register_attack side effects
-from src.camel.attacks import chat_inject  # noqa: F401  -- import for @register_attack side effects
 
-__all__ = ["cascade", "cascade_adaptive", "chat_inject"]
+__all__ = ["cascade", "cascade_adaptive"]

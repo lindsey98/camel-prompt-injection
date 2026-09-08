@@ -67,9 +67,10 @@ saved under a per-attack directory).
 
 `--attack NAME` selects any attack registered in AgentDojo (e.g.
 `important_instructions` (default), `ignore_previous`, `tool_knowledge`, `direct`,
-`dos`). Also bundled is [**ChatInject**](https://github.com/hwanchang00/ChatInject),
-which formats the injection as the target model's *own chat template* so the model
-reads it as real conversation turns:
+`dos`). [**ChatInject**](https://github.com/hwanchang00/ChatInject) — which formats
+the injection as the target model's *own chat template* so the model reads it as real
+conversation turns — is provided by the [agentdojo fork](https://github.com/lindsey98/agentdojo)
+(`agentdojo.attacks.chat_inject`), so these names are available when that fork is installed:
 
 | `--attack` | Description |
 | --- | --- |
@@ -83,13 +84,13 @@ template that matches your `--model`; the wrong template silently no-ops.
 
 ```bash
 python main.py local:Qwen3.6-35B-A3B --run-attack \
-  --attack chat_inject_qwen3_with_utility_system_multiturn_7 --suite banking slack travel workspace
+  --attack chat_inject_qwen3_with_utility_system_multiturn_7 --suite banking slack travel
 ```
 
-The multi-turn variants load a **pre-generated per-goal dialogue** from
-`src/camel/attacks/chatinject_data/`. The shipped data covers the banking / slack /
-travel injection goals only; an uncovered goal (e.g. the AgentDyn suites) raises a
-clear `ValueError`. The template-only variants work on every suite.
+The multi-turn variants load a **pre-generated per-goal dialogue** shipped inside the
+agentdojo fork (`agentdojo/attacks/chatinject_data/`). That data covers the banking /
+slack / travel injection goals only; an uncovered goal (e.g. the AgentDyn suites) raises
+a clear `ValueError`. The template-only variants work on every suite.
 
 Also bundled are the **Cascade** ([arXiv:2510.05244](https://arxiv.org/abs/2510.05244),
 Table 21) "Stage 2" second-order semantic-template attacks — deceptive wrappers that

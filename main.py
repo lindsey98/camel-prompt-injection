@@ -22,7 +22,7 @@ from agentdojo import attacks, benchmark, logging
 from agentdojo.task_suite import get_suite
 from openai.types.chat import ChatCompletionReasoningEffort
 
-import src.camel.attacks  # noqa  -- registers custom attacks (e.g. ChatInject) with AgentDojo
+import src.camel.attacks  # noqa  -- registers custom attacks (Cascade) with AgentDojo
 import src.camel.custom_yaml  # noqa
 from src.camel.interpreter.interpreter import MetadataEvalMode
 from src.camel.models import make_tools_pipeline
@@ -61,7 +61,7 @@ def main(
             `important_instructions`).
         attack: which registered attack to use when `--run-attack` is set. Any attack in AgentDojo's registry is
             accepted (e.g. "important_instructions", "ignore_previous", "tool_knowledge", "direct", "dos"), plus
-            the bundled ChatInject attacks: "chat_inject_qwen3", "chat_inject_glm", and their multi-turn variants
+            the agentdojo fork's ChatInject attacks: "chat_inject_qwen3", "chat_inject_glm", and their multi-turn variants
             "chat_inject_{qwen3,glm}_with_utility_system_multiturn_7" and
             "chat_inject_{qwen3,glm}_with_utility_authority_endorsement_system_multiturn_7". Pick the template
             (qwen3/glm) that matches your target model. Also bundled are the Cascade (arXiv:2510.05244,
