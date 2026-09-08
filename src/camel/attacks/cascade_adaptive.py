@@ -126,8 +126,8 @@ class CascadeAdaptiveAttack(BaseAttack):
 
     name = "cascade_adaptive"
 
-    def __init__(self, task_suite: TaskSuite[Env], target_pipeline: BasePipelineElement) -> None:
-        super().__init__(task_suite, target_pipeline)
+    def __init__(self, task_suite: TaskSuite[Env], target_pipeline: BasePipelineElement, **kwargs) -> None:
+        super().__init__(task_suite, target_pipeline, **kwargs)
         self.max_rounds = int(os.getenv("CASCADE_MAX_ROUNDS", "10"))
         self.defense = os.getenv("CASCADE_DEFENSE", "unknown")
         self._client, self._mutator_model = _make_mutator()

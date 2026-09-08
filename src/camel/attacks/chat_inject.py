@@ -96,8 +96,8 @@ class ChatInjectQwen3(FixedJailbreakAttack):
 
     name = "chat_inject_qwen3"
 
-    def __init__(self, task_suite: TaskSuite[Env], target_pipeline: BasePipelineElement) -> None:
-        super().__init__(_build_attack_string("qwen3"), task_suite, target_pipeline)
+    def __init__(self, task_suite: TaskSuite[Env], target_pipeline: BasePipelineElement, **kwargs) -> None:
+        super().__init__(_build_attack_string("qwen3"), task_suite, target_pipeline, **kwargs)
 
 
 @register_attack
@@ -106,8 +106,8 @@ class ChatInjectGLM(FixedJailbreakAttack):
 
     name = "chat_inject_glm"
 
-    def __init__(self, task_suite: TaskSuite[Env], target_pipeline: BasePipelineElement) -> None:
-        super().__init__(_build_attack_string("glm-4.5"), task_suite, target_pipeline)
+    def __init__(self, task_suite: TaskSuite[Env], target_pipeline: BasePipelineElement, **kwargs) -> None:
+        super().__init__(_build_attack_string("glm-4.5"), task_suite, target_pipeline, **kwargs)
 
 
 # --- Multi-turn variants -----------------------------------------------------------------------------
@@ -140,8 +140,8 @@ class _ChatInjectMultiTurn(FixedJailbreakAttack):
     data_file: str
     model_key: str = "qwen3"
 
-    def __init__(self, task_suite: TaskSuite[Env], target_pipeline: BasePipelineElement) -> None:
-        super().__init__("", task_suite, target_pipeline)
+    def __init__(self, task_suite: TaskSuite[Env], target_pipeline: BasePipelineElement, **kwargs) -> None:
+        super().__init__("", task_suite, target_pipeline, **kwargs)
         with open(_DATA_DIR / self.data_file, encoding="utf-8") as f:
             self._history_by_goal: dict = json.load(f)
 
