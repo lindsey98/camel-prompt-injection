@@ -16,7 +16,6 @@
 
 import dataclasses
 import time
-import types
 import warnings
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any, TypeVar
@@ -85,17 +84,22 @@ def extract_print_output(tool_calls: Sequence[interpreter.FunctionCall]) -> str:
     return printed_output
 
 
-def _is_type_like(v: object) -> bool:
-    """True for values that are types or (generic) type aliases (e.g. ``dict[str, str]``).
+def _json_safe_arg(v: object) -> object:
+    """Coerce a tool-call arg into a type ``FunctionCall.args`` accepts
+    (``str | int | float | bool | None | dict | list | FunctionCall``).
 
-    These are not JSON-serializable and make AgentDojo's logger raise
-    "Circular reference detected", so they must be stringified before logging.
+    Anything else is invalid there and makes ``FunctionCall(...)`` raise a pydantic ``ValidationError``
+    (and also breaks AgentDojo's JSON logger): type objects / generic aliases like ``dict[str, str]``,
+    and exotic scalars like ``datetime``, ``Decimal`` or enums. Stringify those. Only the *logged*
+    tool-call representation is affected -- execution already ran with the real values.
     """
-    return isinstance(v, type | types.GenericAlias) or type(v).__module__ == "typing"
+    if v is None or isinstance(v, (str, int, float, bool, dict, list, functions_runtime.FunctionCall)):
+        return v
+    return repr(v)
 
 
 def function_call_from_ad_function_call(function_call: interpreter.FunctionCall) -> functions_runtime.FunctionCall:
-    args = {k: (repr(v) if _is_type_like(v) else v) for k, v in function_call.args.items()}
+    args = {k: _json_safe_arg(v) for k, v in function_call.args.items()}
     return functions_runtime.FunctionCall(function=function_call.function, args=args)
 
 
