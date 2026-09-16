@@ -55,6 +55,7 @@ _supported_model_names = {
     "Llama-3.3-70B-Instruct": "Llama",
     "Qwen3-30B-A3B-Instruct-2507": "Qwen",
     "Qwen3.6-35B-A3B": "Qwen",
+    "gemma-4-26B-A4B": "Gemma",
 } | _oai_thinking_models_with_effort
 suffixes = ["", "+camel", "+camel+secpol", "+camel+secpol+strict"]
 
