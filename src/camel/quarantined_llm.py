@@ -43,7 +43,7 @@ def _report_qllm_token_usage(run_result) -> None:
     input/output_tokens), so read them defensively. Never let accounting break a run.
     """
     try:
-        from agentdojo.logging import Logger
+        from agentdojo.logging import record_token_usage
 
         usage = run_result.usage()  # AgentRunResult.usage() -> Usage/RunUsage
         prompt = getattr(usage, "input_tokens", None)
@@ -52,10 +52,14 @@ def _report_qllm_token_usage(run_result) -> None:
         completion = getattr(usage, "output_tokens", None)
         if completion is None:
             completion = getattr(usage, "response_tokens", 0)
-        Logger.get().log_tokens(
-            prompt_tokens=prompt or 0,
-            completion_tokens=completion or 0,
-            total_tokens=getattr(usage, "total_tokens", None),
+        # Normalize to the shape AgentDojo's record_token_usage understands, and accumulate into the
+        # active task logger's token_usage (alongside the privileged LLM's tokens).
+        record_token_usage(
+            {
+                "prompt_tokens": prompt or 0,
+                "completion_tokens": completion or 0,
+                "total_tokens": getattr(usage, "total_tokens", None),
+            }
         )
     except Exception:
         pass
