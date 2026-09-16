@@ -34,6 +34,32 @@ _T = TypeVar("_T")
 class NotEnoughInformationError(Exception): ...
 # ... Python 的 Ellipsis，在类/函数体里等价于 pass，表示"这里没有任何实现"
 
+
+def _report_qllm_token_usage(run_result) -> None:
+    """Report the quarantined-LLM (pydantic-ai) call's token usage to the active AgentDojo logger,
+    so it's counted in the task's `token_usage` in the trace JSON alongside the privileged LLM.
+
+    pydantic-ai renamed the usage fields across versions (request/response_tokens ->
+    input/output_tokens), so read them defensively. Never let accounting break a run.
+    """
+    try:
+        from agentdojo.logging import Logger
+
+        usage = run_result.usage()  # AgentRunResult.usage() -> Usage/RunUsage
+        prompt = getattr(usage, "input_tokens", None)
+        if prompt is None:
+            prompt = getattr(usage, "request_tokens", 0)
+        completion = getattr(usage, "output_tokens", None)
+        if completion is None:
+            completion = getattr(usage, "response_tokens", 0)
+        Logger.get().log_tokens(
+            prompt_tokens=prompt or 0,
+            completion_tokens=completion or 0,
+            total_tokens=getattr(usage, "total_tokens", None),
+        )
+    except Exception:
+        pass
+
 _SYSTEM_PROMPT = """\
 You are a helpful assistant that assists a user to parse unstructured data into structured data. \
 If you believe you are not provided with enough information to parse the data, it is **absolutely \
@@ -129,6 +155,7 @@ def query_quarantined_llm(
         run_result = model.run_sync(query)
         # pydantic-ai renamed `AgentRunResult.data` to `.output` in newer versions.
         res = run_result.output if hasattr(run_result, "output") else run_result.data
+        _report_qllm_token_usage(run_result)
     except RecursionError as e:
         if debug:
             print(f"[Q-LLM] FAILED: RecursionError: {e}")
