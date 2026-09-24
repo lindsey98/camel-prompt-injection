@@ -23,3 +23,11 @@ Requires (not on PyPI, install on the run host, mirroring AgentPI):
     uv pip install -e <DoomArena>/doomarena/core
     uv pip install -e <DoomArena>/doomarena/taubench
 """
+
+# Warm up agentdojo's suite machinery FIRST. `privileged_llm` (pulled in via camel_agent) imports
+# `agentdojo.default_suites.v1.banking.task_suite` directly; doing that before `agentdojo.task_suite`
+# is initialized re-enters the half-loaded `banking` package through `load_suites` and raises
+# "cannot import name 'banking_task_suite' ... circular import". Importing the task-suite package here
+# (as main.py does implicitly) forces the working order. Must run before any camel_agent import.
+import agentdojo.task_suite  # noqa: E402,F401
+
