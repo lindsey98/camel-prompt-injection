@@ -27,6 +27,7 @@ interrupt interpretation mid-program.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pydantic
@@ -39,6 +40,9 @@ _JSON_TO_PY: dict[str, Any] = {
     "string": str, "integer": int, "number": float, "boolean": bool,
     "array": list, "object": dict,
 }
+
+#: cap for a tool's docstring embedded in the system prompt (env CAMEL_TB_MAX_TOOL_DOC overrides).
+_MAX_TOOL_DOC = int(os.getenv("CAMEL_TB_MAX_TOOL_DOC", "600"))
 
 
 def _normalize_schema(row: dict) -> tuple[str, str, dict]:
@@ -99,13 +103,19 @@ def build_runtime(state: TauBenchState, tool_rows: list[dict]) -> functions_runt
     runtime = functions_runtime.FunctionsRuntime([])
     for row in tool_rows:
         name, desc, schema = _normalize_schema(row)
+        short = (desc or name).split("\n")[0][:1000] or name
+        # `full_docstring` is embedded verbatim in the system prompt for every tool
+        # (system_prompt_generator.function_to_python_definition). tau-bench's descriptions can be
+        # long, and ~17 of them blow past a small model's context, so cap it. Param NAMES still show
+        # in the rendered signature; they are self-describing here (product_id, order_id, ...).
+        full = (desc or name)[:_MAX_TOOL_DOC]
         fn = functions_runtime.Function(
             name=name,
-            description=(desc or name).split("\n")[0][:1000] or name,
+            description=short,
             parameters=_params_model(name, schema),
             dependencies={},                       # no Depends: the closure holds the env
             run=_make_run(state, name),
-            full_docstring=desc or name,
+            full_docstring=full,
             return_type=str,
         )
         runtime.register_function(fn)

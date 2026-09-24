@@ -61,6 +61,15 @@ log = logging.getLogger(__name__)
 
 _EXCLUDE_CLASSES = {"datetime", "timedelta", "date", "time", "NaiveDatetime", "timezone"}
 
+#: how many trailing (non-system) messages to keep in the codegen chat. The system prompt is always
+#: kept; older turns are dropped so a long conversation doesn't grow past the model's context. The
+#: interpreter `namespace` still carries prior variables, so dropping old chat text is safe.
+_KEEP_MESSAGES = int(os.getenv("CAMEL_TB_KEEP_MESSAGES", "8"))
+
+
+class _ContextTooLong(Exception):
+    """The codegen prompt exceeded the model's context window; retrying it unchanged won't help."""
+
 _SYSTEM_SUFFIX = """\
 
 # tau-bench retail setting
@@ -135,6 +144,9 @@ class CaMeLTauBenchAgent:
             _, _, _, out_messages, _ = self.pllm.llm.query(
                 query=utterance, runtime=self.pllm.dummy_runtime, messages=messages)
         except Exception as e:  # a context-length or API error ends this attempt, not the run
+            low = str(e).lower()
+            if "context length" in low or "maximum context" in low or "input_tokens" in low:
+                raise _ContextTooLong(str(e)) from e
             log.warning("taubench: codegen call failed: %s", e)
             return ""
         code_message = out_messages[-1]
@@ -165,6 +177,8 @@ class CaMeLTauBenchAgent:
         namespace = builtins_ns.add_variables(make_agentdojo_namespace(builtins_ns, runtime, interp_env))
         system_prompt = (self.pllm.system_prompt_generator(runtime.functions.values(), _EXCLUDE_CLASSES)
                          + _SYSTEM_SUFFIX.format(wiki=self.wiki))
+        log.info("taubench: system prompt ~%d tokens (%d tools); context growth capped to last %d msgs",
+                 len(system_prompt) // 4, len(runtime.functions), _KEEP_MESSAGES)
 
         messages = [ad_types.ChatSystemMessage(role="system", content=_text(system_prompt))]
         dependencies: tuple = ()
@@ -176,11 +190,20 @@ class CaMeLTauBenchAgent:
         reward, done = 0.0, False
 
         for _turn in range(max_num_steps):
+            if len(messages) > _KEEP_MESSAGES + 1:  # keep the system prompt + the most recent turns
+                messages = [messages[0], *messages[-_KEEP_MESSAGES:]]
             messages = [*messages, ad_types.ChatUserMessage(
                 role="user", content=_text(_TURN_INSTR.format(utterance=utterance)))]
             reply = ""
             for _attempt in range(self.max_code_attempts):
-                code = self._generate_code(messages, utterance)
+                try:
+                    code = self._generate_code(messages, utterance)
+                except _ContextTooLong as e:
+                    log.warning("taubench: codegen prompt over the model context (%s); pruning and retrying. "
+                                "If it persists, the base prompt is too big -- serve a larger --max-model-len.",
+                                str(e)[:100])
+                    messages = [messages[0], *messages[-4:]]
+                    continue
                 if not code:
                     continue
                 try:
