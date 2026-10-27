@@ -14,7 +14,7 @@ def run_dir_name(model: str) -> str:
     """Mirror agentdojo's make_run_name: basename + '+progent' when Progent is on."""
     name = model.split("/")[-1]
     # name += "+camel"
-    name += "+camel+secpol"
+    # name += "+camel+secpol"
     return name
 
 
@@ -83,7 +83,7 @@ def print_table(title: str, results: dict, task_filter: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Summarize AgentDojo results (utility/security per suite).")
-    parser.add_argument("--model", default="gemma-4-26B-A4B",
+    parser.add_argument("--model", default="gpt-4o-mini",
                         help="Model id; basename and the +progent suffix are applied automatically.")
     parser.add_argument("--name", default=None,
                         help="Exact run-directory name under --log-dir (overrides --model).")
