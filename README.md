@@ -31,7 +31,7 @@ pip install -e ./AgentDyn
 Then pass the new suites explicitly, e.g.:
 
 ```bash
-python main.py MODEL --run-attack --suites shopping github dailylife
+python main.py MODEL --run-attack --suite shopping github dailylife
 ```
 
 Models are passed as `provider:model_name`, e.g. `openai:o3-2025-04-16`,
@@ -67,9 +67,10 @@ saved under a per-attack directory).
 
 `--attack NAME` selects any attack registered in AgentDojo (e.g.
 `important_instructions` (default), `ignore_previous`, `tool_knowledge`, `direct`,
-`dos`). Also bundled is [**ChatInject**](https://github.com/hwanchang00/ChatInject),
-which formats the injection as the target model's *own chat template* so the model
-reads it as real conversation turns:
+`dos`). [**ChatInject**](https://github.com/hwanchang00/ChatInject) — which formats
+the injection as the target model's *own chat template* so the model reads it as real
+conversation turns — is provided by the [agentdojo fork](https://github.com/lindsey98/agentdojo)
+(`agentdojo.attacks.chat_inject`), so these names are available when that fork is installed:
 
 | `--attack` | Description |
 | --- | --- |
@@ -83,23 +84,64 @@ template that matches your `--model`; the wrong template silently no-ops.
 
 ```bash
 python main.py local:Qwen3.6-35B-A3B --run-attack \
-  --attack chat_inject_qwen3_with_utility_system_multiturn_7 --suites banking slack travel
+  --attack chat_inject_qwen3_with_utility_system_multiturn_7 --suite banking slack travel
 ```
 
-The multi-turn variants load a **pre-generated per-goal dialogue** from
-`src/camel/attacks/chatinject_data/`. The shipped data covers the banking / slack /
-travel injection goals only; an uncovered goal (e.g. the AgentDyn suites) raises a
-clear `ValueError`. The template-only variants work on every suite.
+The multi-turn variants load a **pre-generated per-goal dialogue** shipped inside the
+agentdojo fork (`agentdojo/attacks/chatinject_data/`). That data covers the banking /
+slack / travel injection goals only; an uncovered goal (e.g. the AgentDyn suites) raises
+a clear `ValueError`. The template-only variants work on every suite.
+
+Also bundled are the **Cascade** ([arXiv:2510.05244](https://arxiv.org/abs/2510.05244),
+Table 21) "Stage 2" second-order semantic-template attacks — deceptive wrappers that
+drop instruction-like surface forms (several add a high-salience *decoy* to distract
+format-driven defenses while the real payload rides along as trusted metadata):
+
+| `--attack` | Strategy |
+| --- | --- |
+| `cascade_user_note` | Casual user-note framing (`Note from Emma Johnson: …`) |
+| `cascade_task_queue` | Fake `=== Task Queue Status ===` operational formatting |
+| `cascade_safe_tags` | Trusted-looking `<notapromptinjection>` wrapper (provenance cue) |
+| `cascade_decoy_safe_tags` | High-salience `<promptinjection>` decoy + real payload in a safe wrapper |
+| `cascade_skip_directive` | `<hidden_instruction>` + a "skip these tags" directive |
+| `cascade_triple_layer` | decoy + `<notapromptinjection>` + `<hidden_instruction>` combined |
+| `cascade_decoy_system_update` | decoy + urgent `<system_update verified="true">` wrapper |
+
+These work on every suite. Templates are faithful reconstructions of Table 21's
+descriptions (the paper does not publish verbatim strings).
+
+Also bundled is Cascade's **"Stage 3"** defense-aware **adaptive** attack
+(`--attack cascade_adaptive`): a closed loop where an LLM *mutator* proposes an
+injection, we run it through the **target pipeline** and use the injection task's
+`security()` as the success signal, then feed successes/failures back to the mutator
+for up to `CASCADE_MAX_ROUNDS` rounds (default 10), stopping early on success.
+
+> [!WARNING]
+> This runs the full target pipeline up to `CASCADE_MAX_ROUNDS` times **per
+> (user_task, injection_task) pair** — much more expensive than the fixed attacks.
+
+Config via env: `CASCADE_MAX_ROUNDS` (rounds, default 10), `CASCADE_DEFENSE`
+(defense name shown to the mutator, default `unknown`), `CASCADE_MUTATOR_MODEL`
+(default `gpt-4o-mini`), and `CASCADE_MUTATOR_BASE_URL` / `CASCADE_MUTATOR_API_KEY`
+(fall back to `LOCAL_BASE_URL` / `LOCAL_API_KEY`, then `OPENAI_API_KEY` — so the
+mutator can share a local vLLM endpoint).
+
+```bash
+CASCADE_MAX_ROUNDS=6 CASCADE_DEFENSE=camel \
+  python main.py MODEL --run-attack --attack cascade_adaptive --suite banking
+```
 
 ## Common options
 
 `--reasoning-effort {low,medium,high}` (OpenAI reasoning models only) ·
 `--thinking-budget-tokens N` (Anthropic) ·
-`--suites workspace banking travel slack` (plus `shopping github dailylife` with
+`--suite`/`-s` `workspace banking travel slack` (plus `shopping github dailylife` with
 [AgentDyn](#optional-agentdyn-suites) installed) · `--attack NAME` (see
-[Attacks](#attacks)) · `--user-tasks user_task_0 ...` ·
+[Attacks](#attacks)) · `--user-task`/`-ut` `user_task_0 ...` ·
+`--injection-task`/`-it` `injection_task_0 ...` (with `--run-attack`) ·
 `--q-llm provider:model` (cheaper quarantined LLM; single-step only) ·
-`--eval-mode {normal,strict}` · `--force-rerun`.
+`--eval-mode {normal,strict}` · `--force-rerun`/`-f` ·
+`--html` (write an `.html` companion next to every trace JSON).
 Full list: `python main.py --help`.
 
 ## Local / self-hosted models
@@ -120,36 +162,6 @@ Notes:
   prompts are skipped (scored as failed) rather than crashing the run.
 - Open models retry more (weaker structured output / Python). `CAMEL_DEBUG_QLLM=1`
   prints the quarantined-LLM input/output for debugging.
-
-## ASB Observation Prompt Injection (OPI)
-
-Besides AgentDojo, the repo vendors the **Observation Prompt Injection** slice of
-[ASB](https://github.com/agiresearch/ASB) under `asb/`, with **CaMeL wired in as a defense**
-(`defense_type: camel`). ASB is its own agent framework (AIOS + `pyopenagi`), not AgentDojo; OPI
-appends an attacker instruction to a tool's observation, and success (ASR) means the attacker's
-goal appears in the trajectory (RR = the benign task still succeeds).
-
-Setup (on top of the CaMeL env, pointed at the same local vLLM endpoint):
-
-```bash
-pip install -r asb/requirements-opi.txt
-export LOCAL_BASE_URL=http://localhost:8000/v1 LOCAL_API_KEY=EMPTY
-cd asb
-bash scripts/run_opi.sh          # undefended baseline — confirm ASR > 0 first
-bash scripts/run_opi.sh camel    # CaMeL defense — expect ASR to drop
-python scripts/res_retrieval.py  # aggregate ASR/RR from logs/
-```
-
-How CaMeL defends here (`asb/camel_adapter/`): the adapter drives the **real** `PrivilegedLLM`
-pipeline over ASB's tools — same code-gen **retry loop**, **quarantined LLM** (`query_ai_assistant`),
-`default_system_prompt_generator`, and untrusted output tagging via CaMeL's own `AgentDojoFunction`
-(so CaMeL's utility is not understated). ASB tools are wrapped as AgentDojo `Function`s (benign ones
-carry the untrusted OPI injection in their observation); the attacker tool is registered — hence
-advertised, exactly like the ASB baseline — but an `ASBSecurityPolicyEngine` default-deny allowlist
-denies it. Because ASB tools are parameterless, the defense leans on trusted-task code-gen plus the
-allowlist rather than argument-level taint, so treat the ASR/RR numbers as something to **validate
-empirically** per model. The vendored slice omits ASB's DPI/MP/PoT and memory-DB paths; heavy deps
-(torch/transformers/langchain) are import-guarded.
 
 ## FAQ
 

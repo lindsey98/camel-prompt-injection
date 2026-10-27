@@ -192,14 +192,17 @@ def _eval_formatted_value(
                     dependencies,
                 )
     except ValueError as e:
-        if str(e) == "Invalid format specifier":
-            return EvalResult(
-                result.Error(CaMeLException(e, (node,), (evaled_format_spec,))),
-                namespace,
-                tool_calls_chain,
-                dependencies,
-            )
-        raise e
+        # Any ValueError raised by the f-string formatting above is a bad format spec / conversion in
+        # the *generated* code (e.g. f"{x: 'rating'}" or f"{s:d}"). Surface it as a recoverable CaMeL
+        # error so the task fails gracefully instead of crashing the whole benchmark. Match on behavior,
+        # not the message text: CPython <=3.10 says exactly "Invalid format specifier", while 3.11+
+        # embeds the spec and type (e.g. "Invalid format specifier ' 'rating'' for object of type 'str'").
+        return EvalResult(
+            result.Error(CaMeLException(e, (node,), (evaled_format_spec,))),
+            namespace,
+            tool_calls_chain,
+            dependencies,
+        )
 
     if isinstance(evaled_format_spec, value.CaMeLNone):
         deps = (evaled_value,)

@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging as pylogging  # `logging` below is agentdojo.logging (OutputLogger), not the stdlib
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -20,7 +22,7 @@ from agentdojo import attacks, benchmark, logging
 from agentdojo.task_suite import get_suite
 from openai.types.chat import ChatCompletionReasoningEffort
 
-import src.camel.attacks  # noqa  -- registers custom attacks (e.g. ChatInject) with AgentDojo
+import src.camel.attacks  # noqa  -- registers custom attacks (Cascade) with AgentDojo
 import src.camel.custom_yaml  # noqa
 from src.camel.interpreter.interpreter import MetadataEvalMode
 from src.camel.models import make_tools_pipeline
@@ -35,11 +37,13 @@ def main(
     run_attack: bool = False,
     attack: str = "important_instructions",
     replay_with_policies: bool = False,
-    force_rerun: bool = False,
-    suites: Annotated[list[str] | None, cyclopts.Parameter(consume_multiple=True)] = None,
+    force_rerun: Annotated[bool, cyclopts.Parameter(name=("--force-rerun", "-f"))] = False,
+    html: bool = False,
+    suites: Annotated[list[str] | None, cyclopts.Parameter(name=("--suite", "-s"), consume_multiple=True)] = None,
     eval_mode: MetadataEvalMode = MetadataEvalMode.NORMAL,
     q_llm: str | None = None,
-    user_tasks: Annotated[list[str] | None, cyclopts.Parameter(consume_multiple=True)] = None,
+    user_tasks: Annotated[list[str] | None, cyclopts.Parameter(name=("--user-task", "-ut"), consume_multiple=True)] = None,
+    injection_tasks: Annotated[list[str] | None, cyclopts.Parameter(name=("--injection-task", "-it"), consume_multiple=True)] = None,
 ):
     """Example usage of the defense.
 
@@ -57,20 +61,53 @@ def main(
             `important_instructions`).
         attack: which registered attack to use when `--run-attack` is set. Any attack in AgentDojo's registry is
             accepted (e.g. "important_instructions", "ignore_previous", "tool_knowledge", "direct", "dos"), plus
-            the bundled ChatInject attacks: "chat_inject_qwen3", "chat_inject_glm", and their multi-turn variants
+            the agentdojo fork's ChatInject attacks: "chat_inject_qwen3", "chat_inject_glm", and their multi-turn variants
             "chat_inject_{qwen3,glm}_with_utility_system_multiturn_7" and
             "chat_inject_{qwen3,glm}_with_utility_authority_endorsement_system_multiturn_7". Pick the template
-            (qwen3/glm) that matches your target model.
-        force_rerun: re-run tasks even if a cached result/trace already exists (otherwise finished tasks are skipped).
+            (qwen3/glm) that matches your target model. Also bundled are the Cascade (arXiv:2510.05244,
+            Table 21) second-order semantic-template attacks: "cascade_user_note", "cascade_task_queue",
+            "cascade_safe_tags", "cascade_decoy_safe_tags", "cascade_skip_directive", "cascade_triple_layer",
+            "cascade_decoy_system_update", and the Cascade "Stage 3" defense-aware adaptive attack
+            "cascade_adaptive" (closed-loop LLM mutator; runs the target pipeline up to CASCADE_MAX_ROUNDS
+            times per task pair — expensive; configured via CASCADE_* env vars).
+        force_rerun: (`--force-rerun`/`-f`) re-run tasks even if a cached result/trace already exists
+            (otherwise finished tasks are skipped).
+        html: write a rendered `.html` companion next to every trace JSON (same folder/basename, e.g.
+            `none.json` -> `none.html`) for easy inspection.
         replay_with_policies: replay the run with the given model enforcing security policies. Note that the equivalent run (with same model and attack config)
             should have already been run.
-        suites: which suites to run AgentDojo on (can be a list from `["workspace", "banking", "travel", "slack"]`;
-            with the AgentDyn fork of agentdojo installed, `["shopping", "github", "dailylife"]` are also available)
+        suites: (`--suite`/`-s`) which suites to run AgentDojo on (a list from
+            `["workspace", "banking", "travel", "slack"]`; with the AgentDyn fork of agentdojo installed,
+            `["shopping", "github", "dailylife"]` are also available). Defaults to the original four.
         eval_mode: which eval mode to use when propagating dependencies.
         q_llm: what model to use as a quarantined llm. If None, the same as `model` is used.
+        user_tasks: (`--user-task`/`-ut`) which user tasks to run. If not given, all tasks in the suite run.
+        injection_tasks: (`--injection-task`/`-it`) which injection tasks to run (only with `--run-attack`).
+            If not given, all injection tasks run.
     """
 
     attack_name = attack
+
+    # AgentDojo's OutputLogger emits the per-message chat trace via logging.info(..., markup=True), but it
+    # never installs a console handler -- that normally comes from agentdojo's own CLI. Running the
+    # benchmark functions directly (as here) leaves the root logger at its WARNING-only last-resort
+    # handler, so the whole CaMeL trace is swallowed and you only see stray warnings/prints. Install a
+    # RichHandler at INFO (once) so the trace shows again. Override with CAMEL_LOG_LEVEL=WARNING to quiet.
+    if not pylogging.getLogger().handlers:
+        from rich.logging import RichHandler
+
+        pylogging.basicConfig(
+            level=os.getenv("CAMEL_LOG_LEVEL", "INFO").upper(),
+            format="%(message)s",
+            datefmt="[%X]",
+            handlers=[RichHandler(markup=True, show_path=False, rich_tracebacks=True)],
+        )
+
+    if html:
+        # Write an .html companion next to every trace JSON (none.json -> none.html, etc.).
+        from src.camel.trace_html import enable_trace_html
+
+        enable_trace_html()
 
     suites = suites or ["workspace", "banking", "travel", "slack"]
     total_utility_results = []
@@ -100,6 +137,7 @@ def main(
                     logdir,
                     force_rerun=force_rerun,
                     user_tasks=user_tasks,
+                    injection_tasks=injection_tasks,
                 )
             else:
                 results = benchmark.benchmark_suite_without_injections(

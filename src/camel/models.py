@@ -50,11 +50,14 @@ _supported_model_names = {
     "claude-sonnet-4-5-20250929": "Claude",
     "gpt-4o-2024-08-06": "GPT-4",
     "gpt-4o-mini-2024-07-18": "GPT-4",
+    "gpt-4o": "GPT-4",            # bare aliases (proxies/openai serve these names directly)
+    "gpt-4o-mini": "GPT-4",
     "gpt-4.1-2025-04-14": "ChatGPT",
     "gpt-4.1-nano-2025-04-14": "ChatGPT",
     "Llama-3.3-70B-Instruct": "Llama",
     "Qwen3-30B-A3B-Instruct-2507": "Qwen",
     "Qwen3.6-35B-A3B": "Qwen",
+    "gemma-4-26B-A4B": "Gemma",
 } | _oai_thinking_models_with_effort
 suffixes = ["", "+camel", "+camel+secpol", "+camel+secpol+strict"]
 
