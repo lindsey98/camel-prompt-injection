@@ -88,6 +88,11 @@ def main(
 
     attack_name = attack
 
+    # Count EVERY model call's tokens (privileged LLM, quarantined LLM, any defense node) into each
+    # record's prompt_tokens/completion_tokens -- CaMeL otherwise logs none (see src/camel/token_meter.py).
+    from src.camel import token_meter
+    token_meter.install()
+
     # AgentDojo's OutputLogger emits the per-message chat trace via logging.info(..., markup=True), but it
     # never installs a console handler -- that normally comes from agentdojo's own CLI. Running the
     # benchmark functions directly (as here) leaves the root logger at its WARNING-only last-resort
